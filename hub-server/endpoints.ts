@@ -332,6 +332,39 @@ function buildSendWarning(channel: string): string | undefined {
   return warnings.length > 0 ? warnings.join("；") + "。送达状态不确定，建议关注或换通道确认。" : undefined;
 }
 
+/**
+ * 三个 send 端点的公共流程：plugin 查找 → 健康检查 → 收件人解析 → context token → 发送 → 历史 → warning。
+ * 每个端点只需提供自己特有的逻辑（send 参数构造）。
+ */
+async function handleSendRequest(
+  body: { channel: string; to: string; instance?: string },
+  buildSendArgs: (to: string, contextToken: string) => Promise<Parameters<import("./types.js").ChannelPlugin["send"]>[0]>,
+  historyText: (to: string) => string,
+): Promise<Response> {
+  const plugin = channelPlugins.get(body.channel);
+  if (!plugin) return Response.json({ error: `unknown channel: ${body.channel}` }, { status: 404 });
+
+  const healthBlock = checkChannelHealth(body.channel);
+  if (healthBlock) return healthBlock;
+
+  const resolved = resolveRecipient(body.channel, body.to);
+  if (!resolved.ok) return Response.json({ success: false, error: resolved.error });
+  const to = resolved.id;
+
+  const contextTokens = (loadChannelState(body.channel, "context-tokens") ?? {}) as Record<string, string>;
+  const contextToken = contextTokens[to] ?? "";
+
+  const sendArgs = await buildSendArgs(to, contextToken);
+  const result = await plugin.send(sendArgs);
+
+  if (result.success) {
+    appendHistory(body.channel, "out", getOutboundFrom(body.instance), historyText(to));
+    const warning = buildSendWarning(body.channel);
+    if (warning) return Response.json({ ...result, warning });
+  }
+  return Response.json(result);
+}
+
 export function startServer(config: HubConfig): void {
   Bun.serve<WsData>({
     port: config.port,
@@ -722,18 +755,15 @@ export function startServer(config: HubConfig): void {
           if (body.channel === "hub") {
             const instances = getInstances();
             const target = body.to.replace(/^@/, "");
-            // Find by tag first, then by ID
             let targetId: string | null = null;
             for (const [id, inst] of instances) {
               if (inst.tag === target) { targetId = id; break; }
             }
             if (!targetId && instances.has(target)) targetId = target;
 
-            // Get sender info
             const senderInst = body.instance ? instances.get(body.instance) : null;
             const senderLabel = senderInst?.description ?? senderInst?.tag ?? body.instance ?? "unknown";
 
-            // Broadcast to all (except sender) or targeted
             const targetIds = target === "all"
               ? [...instances.keys()].filter((id) => id !== body.instance)
               : targetId ? [targetId] : null;
@@ -755,51 +785,24 @@ export function startServer(config: HubConfig): void {
             return Response.json({ success: true });
           }
 
-          const plugin = channelPlugins.get(body.channel);
-          if (!plugin) {
-            return Response.json({ error: `unknown channel: ${body.channel}` }, { status: 404 });
-          }
-          const healthBlock = checkChannelHealth(body.channel);
-          if (healthBlock) return healthBlock;
-
-          // Resolve nickname → ID via allowlist
-          const resolvedTo = resolveRecipient(body.channel, body.to);
-          if (!resolvedTo.ok) {
-            return Response.json({ success: false, error: resolvedTo.error });
-          }
-          const to = resolvedTo.id;
-
-          // Auto-inject context_token
-          const contextTokens = (loadChannelState(body.channel, "context-tokens") ?? {}) as Record<string, string>;
-          const contextToken = contextTokens[to] ?? "";
-
-          // Add reply tag if multiple instances online
-          const instances = getInstances();
-          const taggedText = addReplyTag(body.text, body.instance ?? "", instances.size, getCurrentConfig(), instances);
-
-          const senderInstance = getInstances().get(body.instance ?? "");
-          const result = await plugin.send({
-            to,
-            content: taggedText,
-            type: "text",
-            raw: {
-              context_token: contextToken,
-              from_instance: body.instance ?? "",
-              from_instance_tag: senderInstance?.description ?? senderInstance?.tag ?? "agent",
-            },
-          });
-
-          if (result.success) {
-            appendHistory(body.channel, "out", getOutboundFrom(body.instance), body.text);
+          return await handleSendRequest(body, async (to, contextToken) => {
+            const instances = getInstances();
+            const taggedText = addReplyTag(body.text, body.instance ?? "", instances.size, getCurrentConfig(), instances);
+            const senderInstance = instances.get(body.instance ?? "");
+            return {
+              to,
+              content: taggedText,
+              type: "text" as const,
+              raw: {
+                context_token: contextToken,
+                from_instance: body.instance ?? "",
+                from_instance_tag: senderInstance?.description ?? senderInstance?.tag ?? "agent",
+              },
+            };
+          }, () => {
             log(`→ [${body.channel}] ${body.to.slice(0, 16)}...: ${body.text.slice(0, 60)}`);
-          }
-
-          // 成功时注入 warning（degraded / 入站久无消息等风险提示）
-          if (result.success) {
-            const warning = buildSendWarning(body.channel);
-            if (warning) return Response.json({ ...result, warning });
-          }
-          return Response.json(result);
+            return body.text;
+          });
         } catch (err) {
           return Response.json({ error: redactSensitive(String(err)) }, { status: 500 });
         }
@@ -815,17 +818,7 @@ export function startServer(config: HubConfig): void {
             instance?: string;
           };
 
-          const plugin = channelPlugins.get(body.channel);
-          if (!plugin) {
-            return Response.json({ error: `unknown channel: ${body.channel}` }, { status: 404 });
-          }
-          const healthBlock = checkChannelHealth(body.channel);
-          if (healthBlock) return healthBlock;
-
-          // Security (redteam B2): path sandbox. 之前 path 无限制，attacker 可
-          // POST /send-file 指向 /Users/victim/.ssh/id_rsa 发到 allowlist 内的
-          // attacker chat。限制：HTTP(S) URL 放行 plugin 下载；本地 path 必须
-          // realpath 落在 $HUB_DIR/sendable/ 内，防 symlink / .. 绕过。
+          // Security: path sandbox (redteam B2)
           const isRemoteUrl = /^https?:\/\//i.test(body.path);
           if (!isRemoteUrl) {
             const sendableRoot = `${HUB_DIR}/sendable`;
@@ -847,33 +840,17 @@ export function startServer(config: HubConfig): void {
             }
           }
 
-          const resolvedFile = resolveRecipient(body.channel, body.to);
-          if (!resolvedFile.ok) return Response.json({ success: false, error: resolvedFile.error });
-          const fileTo = resolvedFile.id;
-
-          const contextTokens = (loadChannelState(body.channel, "context-tokens") ?? {}) as Record<string, string>;
-          const contextToken = contextTokens[fileTo] ?? "";
-
-          const result = await plugin.send({
-            to: fileTo,
+          return await handleSendRequest(body, async (to, contextToken) => ({
+            to,
             content: "",
-            type: "file",
+            type: "file" as const,
             filePath: body.path,
             raw: { context_token: contextToken },
-          });
-
-          if (result.success) {
+          }), () => {
             const fileName = body.path.split("/").pop() ?? body.path;
-            appendHistory(body.channel, "out", getOutboundFrom(body.instance), `[文件] ${fileName}`);
             log(`→ [${body.channel}] 文件: ${body.path.slice(0, 60)}`);
-          }
-
-          // 成功时注入 warning（degraded / 入站久无消息等风险提示）
-          if (result.success) {
-            const warning = buildSendWarning(body.channel);
-            if (warning) return Response.json({ ...result, warning });
-          }
-          return Response.json(result);
+            return `[文件] ${fileName}`;
+          });
         } catch (err) {
           return Response.json({ error: redactSensitive(String(err)) }, { status: 500 });
         }
@@ -889,56 +866,22 @@ export function startServer(config: HubConfig): void {
             instance?: string;
           };
 
-          const plugin = channelPlugins.get(body.channel);
-          if (!plugin) {
-            return Response.json({ error: `unknown channel: ${body.channel}` }, { status: 404 });
-          }
-          const healthBlock = checkChannelHealth(body.channel);
-          if (healthBlock) return healthBlock;
+          // Non-wechat channels need Hub-side TTS before entering the shared flow
+          let oggCleanup: string | null = null;
 
-          const resolvedVoice = resolveRecipient(body.channel, body.to);
-          if (!resolvedVoice.ok) return Response.json({ success: false, error: resolvedVoice.error });
-          const voiceTo = resolvedVoice.id;
-
-          const contextTokens = (loadChannelState(body.channel, "context-tokens") ?? {}) as Record<string, string>;
-          const contextToken = contextTokens[voiceTo] ?? "";
-
-          let result;
-          if (body.channel === "wechat") {
-            // 微信走自己的 TTS → mp3 附件路径（iLink 不接 silk 原生语音，见 wechat-media.ts 注释）
-            result = await plugin.send({
-              to: voiceTo,
-              content: body.text,
-              type: "voice",
-              raw: { context_token: contextToken },
-            });
-          } else {
-            // Other channels: Hub does TTS → ogg, plugin sends the file
-            const oggPath = await synthesizeToOgg(body.text);
-            if (!oggPath) {
-              return Response.json({ success: false, error: "TTS 合成失败" });
+          return await handleSendRequest(body, async (to, contextToken) => {
+            if (body.channel === "wechat") {
+              return { to, content: body.text, type: "voice" as const, raw: { context_token: contextToken } };
             }
-            result = await plugin.send({
-              to: voiceTo,
-              content: body.text,
-              type: "voice",
-              filePath: oggPath,
-              raw: { context_token: contextToken },
-            });
-            try { await fs.promises.rm(path.dirname(oggPath), { recursive: true, force: true }); } catch {}
-          }
-
-          if (result.success) {
-            appendHistory(body.channel, "out", getOutboundFrom(body.instance), `[语音] ${body.text.slice(0, 60)}`);
+            const oggPath = await synthesizeToOgg(body.text);
+            if (!oggPath) throw new Error("TTS 合成失败");
+            oggCleanup = path.dirname(oggPath);
+            return { to, content: body.text, type: "voice" as const, filePath: oggPath, raw: { context_token: contextToken } };
+          }, () => {
+            if (oggCleanup) { fs.promises.rm(oggCleanup, { recursive: true, force: true }).catch(() => {}); }
             log(`→ [${body.channel}] 语音: ${body.text.slice(0, 60)}`);
-          }
-
-          // 成功时注入 warning（degraded / 入站久无消息等风险提示）
-          if (result.success) {
-            const warning = buildSendWarning(body.channel);
-            if (warning) return Response.json({ ...result, warning });
-          }
-          return Response.json(result);
+            return `[语音] ${body.text.slice(0, 60)}`;
+          });
         } catch (err) {
           return Response.json({ error: redactSensitive(String(err)) }, { status: 500 });
         }
