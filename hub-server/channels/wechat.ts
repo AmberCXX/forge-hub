@@ -106,16 +106,6 @@ async function handleTypingBeforeSend(senderId: string, contextToken: string): P
   }
 }
 
-// ── Allowlist ───────────────────────────────────────────────────────────────
-
-function isAllowed(senderId: string): boolean {
-  return hub.isAllowed(senderId);
-}
-
-function getNickname(senderId: string): string {
-  return hub.getNickname(senderId);
-}
-
 // ── Content Extraction ──────────────────────────────────────────────────────
 
 const MEDIA_DIR = path.join(STATE_DIR, "wechat", "media");
@@ -233,7 +223,7 @@ async function startPolling(): Promise<void> {
           hub.setState("context-tokens", tokens);
         }
 
-        if (!isAllowed(senderId)) {
+        if (!hub.isAllowed(senderId)) {
           hub.logError(`⛔ 拒绝未授权 sender: ${senderId}, 内容前 50 字符: "${content.slice(0, 50)}"`);
           hub.pushMessage({
             channel: "wechat",
@@ -245,7 +235,7 @@ async function startPolling(): Promise<void> {
           continue;
         }
 
-        const nick = getNickname(senderId);
+        const nick = hub.getNickname(senderId);
         hub.log(`← ${nick}: ${content.slice(0, 80)}${content.length > 80 ? "..." : ""}`);
 
         startTyping(senderId, msg.context_token ?? "");

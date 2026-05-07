@@ -50,14 +50,6 @@ function stripAnsi(s: string): string {
 
 // ── Allowlist ───────────────────────────────────────────────────────────────
 
-function isAllowed(userId: string): boolean {
-  return hub.isAllowed(userId);
-}
-
-function getNickname(userId: string): string {
-  return hub.getNickname(userId);
-}
-
 // ── Chat History ────────────────────────────────────────────────────────────
 
 // History is now written by Hub layer (hub.ts onMessage/send)
@@ -209,8 +201,8 @@ async function handleMessage(event: Record<string, unknown>): Promise<void> {
 
   // Check allowlist — 私聊按 sender_id 授权；群聊必须显式授权 chat_id，避免个人授权被带进群。
   const isGroupMessage = chatId.startsWith("oc_");
-  const isAuthorizedGroup = isGroupMessage && isAllowed(chatId);
-  const isAuthorizedDirect = !isGroupMessage && isAllowed(senderId);
+  const isAuthorizedGroup = isGroupMessage && hub.isAllowed(chatId);
+  const isAuthorizedDirect = !isGroupMessage && hub.isAllowed(senderId);
   if (!isAuthorizedDirect && !isAuthorizedGroup) {
     const rawPreview = (event.content ?? "") as string;
     hub.logError(`⛔ 拒绝未授权: ${senderName} (${senderId}), 原文前 50: "${rawPreview.slice(0, 50)}"`);
@@ -266,9 +258,9 @@ async function handleMessage(event: Record<string, unknown>): Promise<void> {
 
   if (!content) return;
 
-  const senderDisplay = getNickname(senderId) || senderName;
+  const senderDisplay = hub.getNickname(senderId) || senderName;
   const displayName = isAuthorizedGroup
-    ? `${senderDisplay} @ ${getNickname(chatId)}`
+    ? `${senderDisplay} @ ${hub.getNickname(chatId)}`
     : senderDisplay;
   hub.log(`← ${displayName}: ${content.slice(0, 80)}${content.length > 80 ? "..." : ""}`);
 

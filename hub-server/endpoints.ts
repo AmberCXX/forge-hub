@@ -339,7 +339,8 @@ function buildSendWarning(channel: string): string | undefined {
 async function handleSendRequest(
   body: { channel: string; to: string; instance?: string },
   buildSendArgs: (to: string, contextToken: string) => Promise<Parameters<import("./types.js").ChannelPlugin["send"]>[0]>,
-  historyText: (to: string) => string,
+  onSuccess: (to: string) => string,
+  onFinally?: () => void,
 ): Promise<Response> {
   const plugin = channelPlugins.get(body.channel);
   if (!plugin) return Response.json({ error: `unknown channel: ${body.channel}` }, { status: 404 });
@@ -354,15 +355,19 @@ async function handleSendRequest(
   const contextTokens = (loadChannelState(body.channel, "context-tokens") ?? {}) as Record<string, string>;
   const contextToken = contextTokens[to] ?? "";
 
-  const sendArgs = await buildSendArgs(to, contextToken);
-  const result = await plugin.send(sendArgs);
+  try {
+    const sendArgs = await buildSendArgs(to, contextToken);
+    const result = await plugin.send(sendArgs);
 
-  if (result.success) {
-    appendHistory(body.channel, "out", getOutboundFrom(body.instance), historyText(to));
-    const warning = buildSendWarning(body.channel);
-    if (warning) return Response.json({ ...result, warning });
+    if (result.success) {
+      appendHistory(body.channel, "out", getOutboundFrom(body.instance), onSuccess(to));
+      const warning = buildSendWarning(body.channel);
+      if (warning) return Response.json({ ...result, warning });
+    }
+    return Response.json(result);
+  } finally {
+    onFinally?.();
   }
-  return Response.json(result);
 }
 
 export function startServer(config: HubConfig): void {
@@ -802,7 +807,7 @@ export function startServer(config: HubConfig): void {
           }, () => {
             log(`→ [${body.channel}] ${body.to.slice(0, 16)}...: ${body.text.slice(0, 60)}`);
             return body.text;
-          });
+          }, undefined);
         } catch (err) {
           return Response.json({ error: redactSensitive(String(err)) }, { status: 500 });
         }
@@ -866,7 +871,6 @@ export function startServer(config: HubConfig): void {
             instance?: string;
           };
 
-          // Non-wechat channels need Hub-side TTS before entering the shared flow
           let oggCleanup: string | null = null;
 
           return await handleSendRequest(body, async (to, contextToken) => {
@@ -878,9 +882,10 @@ export function startServer(config: HubConfig): void {
             oggCleanup = path.dirname(oggPath);
             return { to, content: body.text, type: "voice" as const, filePath: oggPath, raw: { context_token: contextToken } };
           }, () => {
-            if (oggCleanup) { fs.promises.rm(oggCleanup, { recursive: true, force: true }).catch(() => {}); }
             log(`→ [${body.channel}] 语音: ${body.text.slice(0, 60)}`);
             return `[语音] ${body.text.slice(0, 60)}`;
+          }, () => {
+            if (oggCleanup) { fs.promises.rm(oggCleanup, { recursive: true, force: true }).catch(() => {}); }
           });
         } catch (err) {
           return Response.json({ error: redactSensitive(String(err)) }, { status: 500 });

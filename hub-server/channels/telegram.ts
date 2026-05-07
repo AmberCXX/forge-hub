@@ -86,9 +86,6 @@ async function tgApiPolling(body: Record<string, unknown>, timeoutMs: number): P
 
 // ── Allowlist ───────────────────────────────────────────────────────────────
 
-function isAllowed(chatId: string): boolean {
-  return hub.isAllowed(chatId);
-}
 
 // ── Media Download ──────────────────────────────────────────────────────────
 
@@ -221,7 +218,7 @@ async function startPolling(): Promise<void> {
         const from = msg.from;
         const displayName = [from?.first_name, from?.last_name].filter(Boolean).join(" ") || from?.username || chatId;
 
-        if (!isAllowed(chatId)) {
+        if (!hub.isAllowed(chatId)) {
           hub.logError(`⛔ 拒绝未授权: ${displayName} (${chatId}), 原文前 50: "${(msg.text ?? "[非文本]").slice(0, 50)}"`);
           hub.pushMessage({
             channel: "telegram",

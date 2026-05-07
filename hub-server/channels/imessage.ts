@@ -34,13 +34,6 @@ let health: ChannelHealth;
 
 // ── Allowlist ───────────────────────────────────────────────────────────────
 
-function isAllowed(handleId: string): boolean {
-  return hub.isAllowed(handleId);
-}
-
-function getNickname(handleId: string): string {
-  return hub.getNickname(handleId);
-}
 
 // ── Self Address Detection ──────────────────────────────────────────────────
 
@@ -219,8 +212,8 @@ async function pollInner(): Promise<void> {
     const isSelfChat = !isGroup && selfAddresses.has(sender.toLowerCase());
     if (isSelfChat && consumeEcho(r.chat_guid, text || "\x00att")) continue;
 
-    const isAuthorizedGroup = isGroup && isAllowed(r.chat_guid);
-    const isAuthorizedDirect = !isGroup && isAllowed(sender);
+    const isAuthorizedGroup = isGroup && hub.isAllowed(r.chat_guid);
+    const isAuthorizedDirect = !isGroup && hub.isAllowed(sender);
 
     // Allowlist check (self-chat bypasses)
     if (!isSelfChat) {
@@ -237,11 +230,11 @@ async function pollInner(): Promise<void> {
       }
     }
 
-    const senderDisplay = getNickname(sender);
+    const senderDisplay = hub.getNickname(sender);
     const displayName = isSelfChat
       ? "用户（自聊）"
       : isAuthorizedGroup
-        ? `${senderDisplay} @ ${getNickname(r.chat_guid)}`
+        ? `${senderDisplay} @ ${hub.getNickname(r.chat_guid)}`
         : senderDisplay;
 
     // Extract attachment file paths from chat.db
