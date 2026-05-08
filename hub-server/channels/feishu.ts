@@ -265,7 +265,7 @@ async function handleMessage(event: Record<string, unknown>): Promise<void> {
   hub.log(`← ${displayName}: ${content.slice(0, 80)}${content.length > 80 ? "..." : ""}`);
 
   // 群消息用 chat_id (oc_) 作为 fromId，这样 reply 会发到群里而不是私聊
-  const replyTo = chatId.startsWith("oc_") ? chatId : senderId;
+  const replyTo = isGroupMessage ? chatId : senderId;
   hub.pushMessage({
     channel: "feishu",
     from: displayName,
