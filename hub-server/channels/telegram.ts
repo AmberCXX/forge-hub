@@ -332,6 +332,7 @@ const plugin: ChannelPlugin = {
       onRestart: async () => {
         hub.log("[telegram] 完整重启：stop polling → restart");
         shouldStop = true;
+        pollAbortController?.abort();
         let wait = 0;
         while (polling && wait < 10) { await new Promise(r => setTimeout(r, 500)); wait++; }
         startPolling();

@@ -284,7 +284,7 @@ const plugin: ChannelPlugin = {
         hub.log("[wechat] 完整重启：stop polling → restart");
         shouldStop = true;
         let wait = 0;
-        while (polling && wait < 10) { await new Promise(r => setTimeout(r, 500)); wait++; }
+        while (polling && wait < 80) { await new Promise(r => setTimeout(r, 500)); wait++; }
         startPolling();
       },
       log: (msg) => hub.log(msg),
