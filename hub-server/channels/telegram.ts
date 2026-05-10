@@ -8,6 +8,7 @@
 import { ChannelStartSkipError } from "../types.js";
 import type { ChannelPlugin, HubAPI, SendResult } from "../types.js";
 import { ChannelHealth } from "../channel-health.js";
+import { isNetworkError, SEND_RETRY_DELAY_MS } from "../send-retry.js";
 import fsMod from "node:fs";
 import pathMod from "node:path";
 import { assertRealPathInsideDir, sanitizeMediaFileName } from "../media-path.js";
@@ -395,8 +396,37 @@ const plugin: ChannelPlugin = {
 
       return { success: false, error: `不支持的类型: ${type}` };
     } catch (err) {
-      hub.logError(`发送失败 (type=${type}, to=${to}): ${redactToken(String(err))}`);
-      return { success: false, error: redactToken(String(err)) };
+      const raw = String(err);
+
+      if (isNetworkError(raw)) {
+        hub.logError(`发送失败（网络），${SEND_RETRY_DELAY_MS / 1000}s 后重试: ${redactToken(raw)}`);
+        await new Promise(r => setTimeout(r, SEND_RETRY_DELAY_MS));
+        try {
+          if (type === "text") {
+            await tgApi("sendMessage", { chat_id: to, text: content });
+          } else if (type === "file" && filePath) {
+            await tgApi("sendDocument", { chat_id: to, document: filePath, caption: content || undefined });
+          } else if (type === "voice" && filePath) {
+            const voiceBuffer = await fsMod.promises.readFile(filePath);
+            const form = new FormData();
+            form.append("chat_id", to);
+            form.append("voice", new Blob([voiceBuffer]), "voice.ogg");
+            const voiceOpts: Record<string, unknown> = { method: "POST", body: form };
+            if (PROXY_URL) voiceOpts.proxy = PROXY_URL;
+            const res = await fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, voiceOpts as any);
+            const data = await res.json() as { ok: boolean; description?: string };
+            if (!data.ok) throw new Error(data.description ?? "sendVoice failed");
+          }
+          hub.log(`→ 重试成功`);
+          return { success: true };
+        } catch (retryErr) {
+          hub.logError(`重试也失败: ${redactToken(String(retryErr))}`);
+          return { success: false, error: `[Telegram 通道] 发送失败——Hub 到 Telegram API 的连接中断。已重试 1 次仍未恢复，建议稍后重试。` };
+        }
+      }
+
+      hub.logError(`发送失败 (type=${type}, to=${to}): ${redactToken(raw)}`);
+      return { success: false, error: `[Telegram 通道] 发送失败——${redactToken(raw)}` };
     }
   },
 

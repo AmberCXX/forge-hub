@@ -17,6 +17,8 @@ import path from "node:path";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
+import { isNetworkError, SEND_RETRY_DELAY_MS } from "../send-retry.js";
+
 const TYPING_STATUS_TYPING = 1;
 const TYPING_STATUS_CANCEL = 2;
 const DEDUP_CAPACITY = 500;
@@ -305,40 +307,55 @@ const plugin: ChannelPlugin = {
     }
 
     const contextToken = (raw?.context_token as string) ?? "";
+    const cancelTyping = await handleTypingBeforeSend(to, contextToken);
 
     try {
-      // Handle typing indicator before sending
-      const cancelTyping = await handleTypingBeforeSend(to, contextToken);
-
       if (type === "text") {
         const cleaned = stripMarkdown(content);
         await sendText(account.baseUrl, account.token, to, cleaned, contextToken);
-        cancelTyping();
         hub.log(`→ ${to.slice(0, 16)}...: ${cleaned.slice(0, 60)}`);
         return { success: true };
       }
 
       if (type === "file" && filePath) {
         await uploadAndSendMedia(account.baseUrl, account.token, to, filePath, contextToken, MEDIA_DIR);
-        cancelTyping();
         hub.log(`→ 文件: ${filePath.slice(0, 60)}`);
         return { success: true };
       }
 
       if (type === "voice") {
-        // 微信 iLink 不接原生 silk 语音（静默吞）——降级为 mp3 附件文件
-        // 详见 wechat-media.ts `sendTtsAsMp3File` 的注释
         await sendTtsAsMp3File(account.baseUrl, account.token, to, content, contextToken, MEDIA_DIR);
-        cancelTyping();
         hub.log(`→ 语音(mp3 附件): "${content.slice(0, 30)}..."`);
         return { success: true };
       }
 
       return { success: false, error: `unknown type: ${type}` };
     } catch (err) {
-      const redacted = redactSensitive(String(err));
-      hub.logError(`发送失败: ${redacted}`);
-      return { success: false, error: redacted };
+      const raw = String(err);
+      if (isNetworkError(raw)) {
+        hub.logError(`发送失败（网络），${SEND_RETRY_DELAY_MS / 1000}s 后重试: ${redactSensitive(raw)}`);
+        await new Promise(r => setTimeout(r, SEND_RETRY_DELAY_MS));
+        try {
+          if (type === "text") {
+            await sendText(account.baseUrl, account.token, to, stripMarkdown(content), contextToken);
+          } else if (type === "file" && filePath) {
+            await uploadAndSendMedia(account.baseUrl, account.token, to, filePath, contextToken, MEDIA_DIR);
+          } else if (type === "voice") {
+            await sendTtsAsMp3File(account.baseUrl, account.token, to, content, contextToken, MEDIA_DIR);
+          }
+          hub.log(`→ 重试成功`);
+          return { success: true };
+        } catch (retryErr) {
+          hub.logError(`重试也失败: ${redactSensitive(String(retryErr))}`);
+          return { success: false, error: `[微信通道] 发送失败——Hub 到 iLink 服务器的连接中断。已重试 1 次仍未恢复，建议稍后重试。` };
+        }
+      }
+      if (raw.includes("sendmessage 失败")) {
+        return { success: false, error: `[微信通道] 发送被 iLink 拒绝（${redactSensitive(raw)}）——可能需要重新扫码登录。` };
+      }
+      return { success: false, error: `[微信通道] 发送失败——${redactSensitive(raw)}` };
+    } finally {
+      cancelTyping();
     }
   },
 
