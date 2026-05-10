@@ -9,18 +9,16 @@ import { log, isLocked, readAuthToken, redactSensitive } from "./config.js";
 import { handleWsOpen, handleWsMessage, handleWsClose } from "./instance-manager.js";
 import { triggerLock, triggerUnlock } from "./lock.js";
 
-import { handleHealth, handleStatus, handlePending, handleOverview } from "./routes/health.js";
+import { handleHealth, handleStatus, handlePending, handleOverview, handleHistory } from "./routes/health.js";
 import { handleSend, handleSendFile, handleSendVoice } from "./routes/send.js";
 import { handlePermissionRequest, handleDeletePending, handleDashboardApprove, handleDashboardDeny, handleDashboardDismiss } from "./routes/approval.js";
 import { handleInstances, handleChannels, handleSetTag, handleSetDescription, handleSetChannels, handleSetSummary } from "./routes/instances.js";
 import { handleHomelandSend, handleHomelandStream, handleHomelandPresence } from "./routes/homeland.js";
 import {
-  hasDashboardSession, shouldRejectUntrustedBrowserOrigin, trustedDashboardCorsHeaders,
+  hasDashboardSession, shouldRejectUntrustedBrowserOrigin, trustedDashboardOrigins, trustedDashboardCorsHeaders,
   isDashboardStaticRequest, serveDashboardStaticOrSpa,
   handleDashboardAuth, handleDashboardLogout,
 } from "./routes/dashboard.js";
-import { readRecentHistory } from "./history.js";
-import { channelPlugins } from "./channel-registry.js";
 
 function normalizeApiPath(pathname: string): string {
   if (pathname === "/api" || pathname === "/api/") return "/";
@@ -76,7 +74,6 @@ export function startServer(config: HubConfig): void {
             ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
           const origin = req.headers.get("Origin");
           if (requiresCheck && origin) {
-            const { trustedDashboardOrigins } = await import("./routes/dashboard.js");
             if (!trustedDashboardOrigins(url).has(origin)) {
               return Response.json({ error: "forbidden_origin" }, { status: 403 });
             }
@@ -147,17 +144,7 @@ export function startServer(config: HubConfig): void {
         if (req.method === "POST" && routePath.startsWith("/pending/") && routePath.endsWith("/dismiss")) return handleDashboardDismiss(routePath);
 
         // History
-        if (req.method === "GET" && routePath === "/history") {
-          const channel = url.searchParams.get("channel") ?? "wechat";
-          if (!channelPlugins.has(channel)) {
-            return Response.json({ error: `unknown channel: ${channel}` }, { status: 400 });
-          }
-          let limit = parseInt(url.searchParams.get("limit") ?? "200", 10);
-          if (!Number.isFinite(limit) || limit <= 0 || limit > 1000) limit = 200;
-          const sinceTs = url.searchParams.get("since_ts");
-          const recent = await readRecentHistory(channel, limit, sinceTs ?? undefined);
-          return Response.json({ channel, history: recent });
-        }
+        if (req.method === "GET" && routePath === "/history") return await handleHistory(url);
 
         // Homeland
         if (req.method === "POST" && routePath === "/homeland/send") return await handleHomelandSend(req);

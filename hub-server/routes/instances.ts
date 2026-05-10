@@ -1,16 +1,12 @@
 import {
-  listKnownInstances, setInstanceTag, setInstanceDescription,
+  setInstanceTag, setInstanceDescription,
   setInstanceChannels, setSummary,
 } from "../instance-manager.js";
 import { channelPluginsMeta } from "../channel-registry.js";
+import { buildInstanceList } from "./health.js";
 
 export function handleInstances(): Response {
-  const list = listKnownInstances().map((i) => ({
-    id: i.id, tag: i.tag, description: i.description, isChannel: i.isChannel,
-    channels: i.channels, presence: i.presence, connectedAt: i.connectedAt,
-    lastSeenAt: i.lastSeenAt, summary: i.summary,
-  }));
-  return Response.json({ instances: list });
+  return Response.json({ instances: buildInstanceList(true) });
 }
 
 export function handleChannels(): Response {

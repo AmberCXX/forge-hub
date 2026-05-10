@@ -1,5 +1,4 @@
 import type { InboundHandleResult } from "../types.js";
-import { redactSensitive } from "../config.js";
 import { getInstances } from "../instance-manager.js";
 import { channelPlugins } from "../channel-registry.js";
 import { addSSEClient, removeSSEClient } from "../channels/homeland.js";
