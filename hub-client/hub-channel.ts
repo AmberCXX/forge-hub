@@ -833,7 +833,7 @@ async function startToolMode(config: SessionConfig | null, label: string): Promi
 
 async function main() {
   await mcpServer.connect(new StdioServerTransport());
-  log("MCP 连接就绪");
+  log(`MCP 连接就绪 (pid=${process.pid})`);
 
   if (SESSION_CONFIG !== null) {
     if (isChannelMode(SESSION_CONFIG)) {
@@ -859,7 +859,7 @@ let exiting = false;
 function gracefulExit(signal: string): void {
   if (exiting) return;
   exiting = true;
-  log(`收到退出信号 (${signal})，关闭 MCP server...`);
+  log(`收到退出信号 (${signal})，关闭 MCP server... (pid=${process.pid})`);
   mcpServer.close().catch(() => {}).finally(() => process.exit(0));
   setTimeout(() => process.exit(0), 200);
 }
