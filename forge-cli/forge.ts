@@ -1158,6 +1158,7 @@ if (!domain) {
   fh hub revoke <ch> <id|nick>   撤销授权（需 Touch ID）
   fh hub owner <ch> [id|nick|--clear]  查看或设置审批 owner
   fh hub allowlist [ch]          查看授权列表
+  fh hub ps                      查看 hub-channel 进程状态
   fh hub preset list             查看通道预设
   fh hub preset add <n> <ch:N>   添加预设（如 wx:200 tg:50）
   fh hub preset remove <n>       删除预设
@@ -1168,6 +1169,88 @@ if (!domain) {
   fh engine log <text>           记一条手动行动日志
   fh engine log --read [n]       查看最近 n 条行动日志`);
   process.exit(0);
+}
+
+// ── hub ps ──────────────────────────────────────────────────────────────────
+
+function hubPs(): void {
+  const CLIENT_LOG = path.join(HUB_DIR, "hub-client.log");
+
+  // 1. 拿当前活着的 hub-channel PID
+  let psOutput = "";
+  try {
+    psOutput = execFileSync("/bin/ps", ["aux"], { encoding: "utf-8" });
+  } catch { die("无法执行 ps"); }
+
+  const livePids = new Set<string>();
+  for (const line of psOutput.split("\n")) {
+    if (line.includes("hub-channel.ts") && !line.includes("grep")) {
+      const pid = line.trim().split(/\s+/)[1];
+      if (pid) livePids.add(pid);
+    }
+  }
+
+  // 2. 从 hub-client.log 读 PID → instance 映射
+  const pidToInfo = new Map<string, { instance: string; mode: string; startedAt: string }>();
+  try {
+    const log = fs.readFileSync(CLIENT_LOG, "utf-8");
+    for (const line of log.split("\n")) {
+      const pidMatch = line.match(/\[([^\]]+)\] INFO MCP 连接就绪 \(pid=(\d+)\)/);
+      if (pidMatch) {
+        const [, instance, pid] = pidMatch;
+        pidToInfo.set(pid, { instance, mode: "?", startedAt: "" });
+      }
+      const modeMatch = line.match(/\[([^\]]+)\] INFO Hub Client 已启动 [✦·] (.+)/);
+      if (modeMatch) {
+        const [, instance, modeStr] = modeMatch;
+        for (const [pid, info] of pidToInfo) {
+          if (info.instance === instance) {
+            info.mode = modeStr.includes("channel") ? "channel" : "tools";
+          }
+        }
+      }
+    }
+  } catch {}
+
+  // 3. 从 Hub API 拿在线实例
+  let hubInstances: { id: string; channels?: string[]; description?: string; presence?: string }[] = [];
+  try {
+    const res = execFileSync("/usr/bin/curl", ["-s", "--connect-timeout", "2", `${HUB_URL}/instances`, ...( HUB_API_TOKEN ? ["-H", `Authorization: Bearer ${HUB_API_TOKEN}`] : [])], { encoding: "utf-8" });
+    const data = JSON.parse(res);
+    hubInstances = data.instances ?? [];
+  } catch {}
+
+  // 4. 输出
+  console.log(`hub-channel 进程 (${livePids.size} 个):\n`);
+  if (livePids.size === 0) {
+    console.log("  无");
+  } else {
+    for (const pid of livePids) {
+      const info = pidToInfo.get(pid);
+      const inst = info ? hubInstances.find(i => i.id === info.instance) : null;
+      const mode = info?.mode ?? "?";
+      const instance = info?.instance ?? "unknown";
+      const desc = inst?.description ? ` "${inst.description}"` : "";
+      const channels = inst?.channels ? ` [${inst.channels.join(",")}]` : "";
+      console.log(`  pid=${pid}  ${instance}  ${mode}${desc}${channels}`);
+    }
+  }
+
+  // 5. 孤儿检测
+  const logPids = new Set(pidToInfo.keys());
+  const orphans = [...livePids].filter(pid => !logPids.has(pid));
+  if (orphans.length > 0) {
+    console.log(`\n⚠ 可能的孤儿进程: ${orphans.map(p => `pid=${p}`).join(", ")}`);
+  }
+
+  // 6. Hub server
+  try {
+    const res = execFileSync("/usr/bin/curl", ["-s", "--connect-timeout", "2", `${HUB_URL}/health`, ...(HUB_API_TOKEN ? ["-H", `Authorization: Bearer ${HUB_API_TOKEN}`] : [])], { encoding: "utf-8" });
+    const h = JSON.parse(res);
+    console.log(`\nHub server: uptime ${h.uptime}s  locked=${h.locked}`);
+  } catch {
+    console.log("\nHub server: 不可达");
+  }
 }
 
 if (domain === "hub") {
@@ -1185,6 +1268,7 @@ if (domain === "hub") {
     case "resolve": await hubResolve(rest); break;
     case "approval-audit": await hubApprovalAudit(rest); break;
     case "self-test": await hubSelfTest(); break;
+    case "ps": hubPs(); break;
     case "replay": await hubReplay(rest); break;
     case "send": await hubSend(rest); break;
     case "name": await hubName(rest); break;
