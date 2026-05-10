@@ -851,6 +851,20 @@ async function main() {
   }
 }
 
+// ── Graceful Exit ────────────────────────────────────────────────────────────
+// MCP 协议：client 关 stdin = 会话结束。SDK 的 StdioServerTransport 不监听
+// stdin end，需要 server 自己处理。不处理会导致孤儿进程。
+
+async function gracefulExit(): Promise<void> {
+  log("收到退出信号，关闭 MCP server...");
+  try { await mcpServer.close(); } catch {}
+  process.exit(0);
+}
+
+process.stdin.on("end", gracefulExit);
+process.on("SIGINT", gracefulExit);
+process.on("SIGTERM", gracefulExit);
+
 main().catch((err) => {
   logError(`Fatal: ${String(err)}`);
   process.exit(1);
