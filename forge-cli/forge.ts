@@ -1190,10 +1190,16 @@ function hubPs(): void {
     }
   }
 
-  // 2. 从 hub-client.log 读 PID → instance 映射
+  // 2. 从 hub-client.log 尾部读 PID → instance 映射（只读最后 64KB，避免大文件全量读）
   const pidToInfo = new Map<string, { instance: string; mode: string; startedAt: string }>();
   try {
-    const log = fs.readFileSync(CLIENT_LOG, "utf-8");
+    const fd = fs.openSync(CLIENT_LOG, "r");
+    const stat = fs.fstatSync(fd);
+    const readSize = Math.min(stat.size, 64 * 1024);
+    const buf = Buffer.alloc(readSize);
+    fs.readSync(fd, buf, 0, readSize, stat.size - readSize);
+    fs.closeSync(fd);
+    const log = buf.toString("utf-8");
     for (const line of log.split("\n")) {
       const pidMatch = line.match(/\[([^\]]+)\] INFO MCP 连接就绪 \(pid=(\d+)\)/);
       if (pidMatch) {
