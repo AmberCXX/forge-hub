@@ -864,6 +864,7 @@ function gracefulExit(signal: string): void {
   setTimeout(() => process.exit(0), 200);
 }
 
+process.stdin.resume();
 process.stdin.on("end", () => gracefulExit("stdin-end"));
 process.on("SIGINT", () => gracefulExit("SIGINT"));
 process.on("SIGTERM", () => gracefulExit("SIGTERM"));
