@@ -303,7 +303,7 @@ export async function uploadAndSendMedia(
     mediaItem = { type: 4, file_item: { media: mediaRef, file_name: path.basename(localPath), len: String(rawsize) } };
   }
 
-  await apiFetch({
+  const sendResult = await apiFetch({
     baseUrl,
     endpoint: "ilink/bot/sendmessage",
     body: JSON.stringify({
@@ -318,6 +318,12 @@ export async function uploadAndSendMedia(
     token,
     timeoutMs: 15_000,
   });
+  const sendResp = JSON.parse(sendResult.text) as { ret?: number; errcode?: number; errmsg?: string };
+  const hasError = (sendResp.ret !== undefined && sendResp.ret !== 0)
+    || (sendResp.errcode !== undefined && sendResp.errcode !== 0);
+  if (hasError) {
+    throw new Error(`sendmessage 失败: ret=${sendResp.ret} errcode=${sendResp.errcode} errmsg=${sendResp.errmsg ?? ""}`);
+  }
 }
 
 // ── Voice Send (TTS → mp3 → file attachment) ────────────────────────────────
