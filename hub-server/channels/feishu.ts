@@ -39,6 +39,50 @@ let subscribeProc: ReturnType<typeof spawn> | null = null;
 let running = false;
 let health: ChannelHealth;
 
+// ── Stale Process Cleanup ──────────────────────────────────────────────────
+
+const LARK_EVENT_PATTERN = "lark-cli event \\+subscribe";
+
+function pgrepLarkEvent(): string | null {
+  try {
+    const out = execFileSync("/usr/bin/pgrep", ["-f", LARK_EVENT_PATTERN], { encoding: "utf-8" }).trim();
+    return out || null;
+  } catch {
+    return null; // exit 1 = no match
+  }
+}
+
+function pkillLarkEvent(signal?: string): void {
+  try {
+    const args = signal ? [signal, "-f", LARK_EVENT_PATTERN] : ["-f", LARK_EVENT_PATTERN];
+    execFileSync("/usr/bin/pkill", args);
+  } catch {}
+}
+
+async function cleanupStaleLarkCli(): Promise<void> {
+  const existing = pgrepLarkEvent();
+  if (!existing) return;
+
+  const pids = existing.split("\n").join(", ");
+  hub.log(`检测到残留 lark-cli event 进程 (pid: ${pids})，正在清理...`);
+
+  pkillLarkEvent();
+  await new Promise(r => setTimeout(r, 2000));
+
+  if (pgrepLarkEvent()) {
+    hub.log(`残留进程未退出，强制终止 (SIGKILL)...`);
+    pkillLarkEvent("-9");
+    await new Promise(r => setTimeout(r, 1000));
+
+    if (pgrepLarkEvent()) {
+      hub.logError("残留 lark-cli 进程清理失败，飞书通道可能抢消息");
+      return;
+    }
+  }
+
+  hub.log("残留 lark-cli 进程已清理");
+}
+
 // ── Subscription Health ────────────────────────────────────────────────────
 
 let eventCount = 0;
@@ -311,30 +355,9 @@ const plugin: ChannelPlugin = {
       log: (msg) => hub.log(msg),
     });
 
-    // S2: detect stale lark-cli event subscribers before starting our own.
-    // 飞书 app 支持最多 50 个 WebSocket listener（集群模式，事件随机投递一个
-    // client），但多进程同时订阅仍会抢消息。常见触发：用户的 wrapper 脚本自己
-    // spawn lark-cli、之前手动 debug 留下的进程、或 forge-hub 前一次异常退出
-    // 未走 stop() 的残留。不自动 kill（可能是用户有意在跑），log 告诉用户
-    // 怎么清 + 本次启动跳过。watchdog 不会自动重启（stoppedReason="config"）。
-    try {
-      const existing = execFileSync("/usr/bin/pgrep", [
-        "-f", "lark-cli event \\+subscribe",
-      ], { encoding: "utf-8" }).trim();
-      if (existing) {
-        const pids = existing.split("\n").join(", ");
-        hub.logError(
-          `⚠️ 已有 lark-cli event +subscribe 进程在跑 (pid: ${pids})。` +
-          `飞书 app 多进程订阅会抢消息（事件只投递给一个 client）。` +
-          `请先 \`pkill -f 'lark-cli event'\` 清理（或检查是否有其他 wrapper / 调试进程残留），然后重启 hub。本次飞书通道启动跳过。`,
-        );
-        plugin.stoppedReason = "config";
-        throw new ChannelStartSkipError("已有其他 lark-cli subscriber 正在占用飞书事件流");
-      }
-    } catch (err) {
-      if (err instanceof ChannelStartSkipError) throw err;
-      // pgrep exit 1 = no match = safe to continue
-    }
+    // 清理残留的 lark-cli event 进程（Hub 异常退出 / SIGTERM 未走 stop() 时常见）。
+    // 多进程订阅会抢消息（事件只投递给一个 client），必须确保只有一个。
+    await cleanupStaleLarkCli();
 
     // Verify lark-cli is available and authenticated
     try {
@@ -418,8 +441,9 @@ const plugin: ChannelPlugin = {
         proc.once("close", () => { clearTimeout(timer); resolve(); });
         proc.kill("SIGTERM");
       });
-      hub.log("飞书事件订阅已停止");
+      pkillLarkEvent();
     }
+    hub.log("飞书事件订阅已停止");
   },
 };
 

@@ -92,7 +92,7 @@ async function stopWithTimeout(plugin: ChannelPlugin, reason: string): Promise<v
 /** Load 结果三态：plugin（正常加载）、helper（纯 import module，不算通道）、error（文件存在但读取/import 失败） */
 type LoadOutcome =
   | { kind: "plugin"; plugin: ChannelPlugin }
-  | { kind: "skipped"; reason: string }
+  | { kind: "skipped"; reason: string; pluginName: string }
   | { kind: "helper"; reason: string }
   | { kind: "error"; reason: string };
 
@@ -123,7 +123,7 @@ async function loadPlugin(
     await plugin.start(hubAPI);
   } catch (err) {
     if (err instanceof ChannelStartSkipError) {
-      return { kind: "skipped", reason: err.message };
+      return { kind: "skipped", reason: err.message, pluginName: plugin.name };
     }
     return { kind: "error", reason: `start() 抛错: ${String(err)}` };
   }
@@ -201,6 +201,13 @@ export async function loadChannels(
       fileToPlugin.set(filePath, outcome.plugin.name);
     } else if (outcome.kind === "skipped") {
       log(`⏭ 通道跳过: ${file}（${outcome.reason}）`);
+      onMessage({
+        channel: outcome.pluginName,
+        from: "system",
+        fromId: "system",
+        content: `[通道启动失败] ${outcome.pluginName} 跳过——${outcome.reason}`,
+        raw: {},
+      });
     } else if (outcome.kind === "helper") {
       log(`📄 ${file}: 视为 helper（${outcome.reason}）`);
     } else {
@@ -294,6 +301,13 @@ function startWatcher(onMessage: (msg: InboundMessage) => void): void {
             fileToPlugin.delete(filePath);
           }
           log(`⏭ 通道跳过: ${filename}（${outcome.reason}）`);
+          onMessage({
+            channel: outcome.pluginName,
+            from: "system",
+            fromId: "system",
+            content: `[通道启动失败] ${outcome.pluginName} 跳过——${outcome.reason}`,
+            raw: {},
+          });
           syncSharedRegistry();
         } else if (outcome.kind === "helper") {
           log(`📄 ${filename}: 视为 helper（${outcome.reason}）——不重载`);
