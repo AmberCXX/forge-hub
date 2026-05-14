@@ -51,7 +51,9 @@ export function formatInstanceLabel(instance: HubInstanceView): string {
 }
 
 export function formatInstanceChannels(instance: HubInstanceView): string {
-  return instance.channels ? instance.channels.join(", ") : "all";
+  if (instance.channels?.length) return instance.channels.join(", ");
+  if (instance.isChannel === false) return "—";
+  return "all";
 }
 
 export function timeSince(iso: string, now = Date.now()): string {

@@ -17,6 +17,9 @@ const {
   sendPendingApprovalResponse,
 } = await import("./approval.js");
 const { getInstances } = await import("./instance-manager.js");
+const { setCurrentConfig } = await import("./hub-state.js");
+const { handlePermissionRequest } = await import("./routes/approval.js");
+const { drainQueuedWrites } = await import("./write-queue.js");
 const { saveChannelState } = await import("./state.js");
 import { getAuthSenderId } from "./message-auth.js";
 import type { ConnectedInstance, PendingPermission } from "./types.js";
@@ -55,11 +58,19 @@ beforeEach(() => {
   pendingPermissions.clear();
   idLookup.clear();
   getInstances().clear();
+  setCurrentConfig({
+    port: 9900,
+    host: "127.0.0.1",
+    primary_instance: "",
+    show_instance_tag: false,
+    approval_channels: ["wechat"],
+  });
   writeTestAllowlist("wechat", { allowed: [], auto_allow_next: false });
   writeTestAllowlist("imessage", { allowed: [], auto_allow_next: false });
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await drainQueuedWrites();
   fs.rmSync(hubDir, { recursive: true, force: true });
 });
 
@@ -202,5 +213,29 @@ describe("sendPendingApprovalResponse", () => {
 
     expect(result).toEqual({ ok: false, reason: "dropped", sendStatus: 0 });
     expect(pendingPermissions.has(pending.request_id)).toBe(true);
+  });
+});
+
+describe("handlePermissionRequest", () => {
+  test("returns 503 without registering pending state when the requester is offline", async () => {
+    const response = await handlePermissionRequest(new Request("http://localhost/permission-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        request_id: "abcde",
+        tool_name: "Bash",
+        description: "Run a command",
+        input_preview: "echo hi",
+        instance: "offline-instance",
+      }),
+    }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining("offline-instance"),
+    });
+    expect(pendingPermissions.has("abcde")).toBe(false);
+    expect(idLookup.size).toBe(0);
   });
 });

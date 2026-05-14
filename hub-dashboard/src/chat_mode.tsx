@@ -539,7 +539,7 @@ function ChannelConfigDialog({ title, channels, preselected, onConfirm, onCancel
   });
   const [historyCounts, setHistoryCounts] = React.useState<Record<string, string>>(() => {
     const h: Record<string, string> = {};
-    channels.forEach(c => { h[c.id] = '10'; });
+    channels.forEach(c => { h[c.id] = '5'; });
     return h;
   });
   const allSelected = selected.has(allChannelId);

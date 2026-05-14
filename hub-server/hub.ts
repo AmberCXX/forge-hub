@@ -59,19 +59,30 @@ import { getAuthSenderId, isAuthorizedSenderMatch } from "./message-auth.js";
 // ── Load Config ─────────────────────────────────────────────────────────────
 
 function loadConfig(): HubConfig {
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
-    }
-  } catch (err) {
-    logError(`读取配置失败: ${String(err)}`);
-  }
-  return {
+  const defaults: HubConfig = {
     port: DEFAULT_PORT,
     host: DEFAULT_HOST,
     primary_instance: "",
     show_instance_tag: false,
   };
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8")) as unknown;
+      const userConfig = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Partial<HubConfig>
+        : {};
+      const merged: HubConfig = { ...defaults, ...userConfig };
+      if (typeof merged.host !== "string" || merged.host.trim() === "") merged.host = DEFAULT_HOST;
+      else merged.host = merged.host.trim();
+      if (typeof merged.port !== "number" || !Number.isInteger(merged.port) || merged.port <= 0 || merged.port > 65535) {
+        merged.port = DEFAULT_PORT;
+      }
+      return merged;
+    }
+  } catch (err) {
+    logError(`读取配置失败: ${String(err)}`);
+  }
+  return defaults;
 }
 
 // ── Message Handler ─────────────────────────────────────────────────────────

@@ -1006,7 +1006,7 @@ function engineRemove(args: string[]) {
 
   const query = args.join(" ");
   const validation = validateEngineRemoveQuery(query);
-  if (!validation.ok) {
+  if (validation.ok === false) {
     die(`非法任务名: ${validation.reason}`);
   }
 

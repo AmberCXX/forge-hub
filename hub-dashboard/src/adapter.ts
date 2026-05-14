@@ -85,7 +85,7 @@ export function adaptInstance(inst: Instance, index: number, allLoadedChannelIds
       : "仅工具 · 不接收消息",
     mood: "calm",
     uptime: formatUptime(inst.connectedAt),
-    channels: inst.channels ?? allLoadedChannelIds,
+    channels: isChannel ? (inst.channels ?? allLoadedChannelIds) : [],
     seed: hashSeed(inst.id),
     shape: SHAPES[index % SHAPES.length],
     lastMessageAt: ago(inst.connectedAt),

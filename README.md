@@ -86,7 +86,19 @@ claude --dangerously-load-development-channels server:hub
 > `--dangerously-load-development-channels` 是 Anthropic Channels 协议的 opt-in flag——详见 [Channels Reference](https://code.claude.com/docs/en/channels-reference)。**基础 channel 能力最低 Claude Code 版本：2.1.80；远程审批 relay 需要 2.1.81+。**
 
 > [!IMPORTANT]
-> **远程审批需要配 `approval_channels` 和审批 owner**。Claude 跑 Bash / Write / Edit 等工具时会请求审批，hub-server 根据 `approval_channels` 把请求推到手机；每个审批通道还必须有显式 owner（`fh hub owner <channel> <id>`），只有 owner 的 yes/no 回复会生效。没配 `approval_channels` 时远程审批不生效，工具调用会降级到本地终端弹窗确认。要启用远程审批，编辑 `~/.forge-hub/hub-config.json` 加 `{ "approval_channels": ["telegram"] }` 或你已配好的其他通道。详见 [配置.md §审批推送配置](配置.md)。
+> **远程审批需要配 `approval_channels` 和审批 owner**。Claude 跑 Bash / Write / Edit 等工具时会请求审批，hub-server 根据 `approval_channels` 把请求推到手机；每个审批通道还必须有显式 owner（`fh hub owner <channel> <id>`），只有 owner 的 yes/no 回复会生效。没配 `approval_channels` 时远程审批不生效，工具调用会降级到本地终端弹窗确认。要启用远程审批，编辑 `~/.forge-hub/hub-config.json`，用完整本机安全配置起步：
+>
+> ```json
+> {
+>   "port": 9900,
+>   "host": "127.0.0.1",
+>   "primary_instance": "",
+>   "show_instance_tag": false,
+>   "approval_channels": ["telegram"]
+> }
+> ```
+>
+> 把 `approval_channels` 换成你已配置 owner 的通道。详见 [配置.md §审批推送配置](配置.md)。
 
 > [!NOTE]
 > **首次调用 `hub_reply` / `hub_send_file` 等 MCP 工具时 Claude Code 会弹审批**——属于 CC 默认的 MCP tool approval 行为，不是 forge-hub 的设计。approve 一次，或在 CC 里 `/allowed-tools` 添加 `mcp__hub__hub_reply` / `mcp__hub__hub_send_file` / `mcp__hub__hub_send_voice` 到全局允许列表，之后就不再弹。

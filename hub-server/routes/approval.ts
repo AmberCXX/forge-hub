@@ -3,6 +3,7 @@ import { loadChannelState } from "../state.js";
 import { channelPlugins } from "../channel-registry.js";
 import { getCurrentConfig } from "../hub-state.js";
 import { checkPermissionRate, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "../rate-limit.js";
+import { getInstances } from "../instance-manager.js";
 import {
   pendingPermissions, idLookup,
   genDisplayIdPair, savePendingToDisk,
@@ -20,6 +21,13 @@ export async function handlePermissionRequest(req: Request): Promise<Response> {
     return Response.json(
       { success: false, error: "invalid request_id format (must be 5 lowercase letters, no 'l')" },
       { status: 400 },
+    );
+  }
+
+  if (!getInstances().has(body.instance)) {
+    return Response.json(
+      { success: false, error: `instance ${body.instance} is not online; falling back to local approval` },
+      { status: 503 },
     );
   }
 

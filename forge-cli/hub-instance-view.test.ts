@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  formatInstanceChannels,
   formatKnownState,
   getInstancePresence,
   partitionInstances,
@@ -48,5 +49,12 @@ describe("hub instance view helpers", () => {
         now,
       ),
     ).toBe("离线 · 上次出现 2h前");
+  });
+
+  test("formats tool-only and all-channel subscriptions separately", () => {
+    expect(formatInstanceChannels({ id: "tool-1", isChannel: false })).toBe("—");
+    expect(formatInstanceChannels({ id: "channel-1", isChannel: true })).toBe("all");
+    expect(formatInstanceChannels({ id: "legacy-channel" })).toBe("all");
+    expect(formatInstanceChannels({ id: "channel-2", isChannel: true, channels: ["wechat", "telegram"] })).toBe("wechat, telegram");
   });
 });
