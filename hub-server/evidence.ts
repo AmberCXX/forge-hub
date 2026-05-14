@@ -195,14 +195,15 @@ function buildAndWrite(input: AppendInput, key: string): EvidenceRecord {
 
 function writeFallback(rawJson: string, channel: string, updateId: string): void {
   try {
-    const fallbackPath = path.join(getEvidenceDir(), "evidence_fallback.jsonl");
+    const dir = getEvidenceDir();
+    const fallbackPath = path.join(dir, "evidence_fallback.jsonl");
     const line = JSON.stringify({
       timestamp: new Date().toISOString(),
       channel,
       update_id: updateId,
       raw_base64: encodeRawUpdate(rawJson),
     });
-    fs.mkdirSync(getEvidenceDir(), { recursive: true, mode: 0o700 });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     fs.appendFileSync(fallbackPath, line + "\n", { encoding: "utf-8", mode: 0o600 });
   } catch {
     // fallback 的 fallback 只能放弃
