@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { computeRawHash, encodeRawUpdate, recordUnauthorizedEvidence } from "./evidence.js";
+import { computeEntryHash, computeRawHash, encodeRawUpdate, recordUnauthorizedEvidence } from "./evidence.js";
 import { sanitizeExternalField } from "./sanitize.js";
 
 let tmpDir: string;
@@ -44,6 +44,30 @@ describe("encodeRawUpdate", () => {
     expect(encoded).toMatch(/^[A-Za-z0-9+/]+=*$/);
     const decoded = Buffer.from(encoded, "base64").toString("utf-8");
     expect(decoded).toBe(input);
+  });
+});
+
+// ── computeEntryHash ──────────────────────────────────────────────────────
+
+describe("computeEntryHash", () => {
+  test("covers nested content_meta fields", () => {
+    const base = {
+      channel: "telegram",
+      content_meta: {
+        file_name: "invoice.pdf",
+        mime_type: "application/pdf",
+      },
+      raw_update_base64: "abc",
+    };
+    const changed = {
+      ...base,
+      content_meta: {
+        ...base.content_meta,
+        file_name: "payload.pdf",
+      },
+    };
+
+    expect(computeEntryHash(null, base)).not.toBe(computeEntryHash(null, changed));
   });
 });
 

@@ -233,7 +233,7 @@ async function pollInner(): Promise<void> {
         };
         if (text) rawData.text_length = text.length;
 
-        recordUnauthorizedEvidence({
+        const evidence = recordUnauthorizedEvidence({
           channel: "imessage",
           ingestMode: "polling",
           updateId: String(r.rowid),
@@ -245,6 +245,11 @@ async function pollInner(): Promise<void> {
           rawJson: JSON.stringify(rawData),
           displayName: sender,
           logError: (m) => hub.logError(m),
+        });
+        hub.recordSecurityEvent({
+          sourceUserId: sender,
+          contentType,
+          evidenceId: evidence?.evidence_id ?? "",
         });
         continue;
       }

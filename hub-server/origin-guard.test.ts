@@ -4,6 +4,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
+import { shouldRejectUntrustedBrowserOrigin, trustedDashboardOrigins } from "./routes/dashboard.js";
 
 const HUB_SERVER_PATH = path.join(import.meta.dir, "hub.ts");
 const EVIL_ORIGIN = "https://evil.example";
@@ -103,6 +104,17 @@ async function expectForbiddenFromEvilOrigin(hub: TestHub, pathname: string, ini
 }
 
 describe("browser Origin guard", () => {
+  test("does not trust arbitrary Host-derived origins", () => {
+    const req = new Request("http://evil.example:9900/lock", {
+      method: "POST",
+      headers: { Origin: "http://evil.example:9900" },
+    });
+    const url = new URL(req.url);
+
+    expect(trustedDashboardOrigins(url).has("http://evil.example:9900")).toBe(false);
+    expect(shouldRejectUntrustedBrowserOrigin(req, url, "/lock", false)).toBe(true);
+  });
+
   test("rejects malicious browser origins in no-token mode", async () => {
     const hub = await startHub();
 

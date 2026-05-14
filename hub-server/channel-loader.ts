@@ -11,7 +11,7 @@ import path from "node:path";
 import { CHANNELS_DIR, log, logError, channelLog, channelLogError, formatUnauthorizedNotice as _formatUnauthorizedNotice } from "./config.js";
 import { loadChannelState, saveChannelState, isAllowedSender, getNickname as _getNickname } from "./state.js";
 import { ChannelStartSkipError } from "./types.js";
-import type { ChannelPlugin, HubAPI, InboundMessage } from "./types.js";
+import type { ChannelPlugin, HubAPI, HubSecurityEventParams, InboundMessage } from "./types.js";
 import { populate as populateRegistry, type ChannelMetaEntry, type ChannelSendEntry } from "./channel-registry.js";
 
 // ── State ───────────────────────────────────────────────────────────────────
@@ -36,7 +36,11 @@ function fileHash(filePath: string): string {
 
 // ── HubAPI Factory ──────────────────────────────────────────────────────────
 
-function createHubAPI(channelName: string, onMessage: (msg: InboundMessage) => void): HubAPI {
+export function createHubAPI(
+  channelName: string,
+  onMessage: (msg: InboundMessage) => void,
+  onSecurityEvent: (params: HubSecurityEventParams) => void = () => {},
+): HubAPI {
   return {
     pushMessage(msg: InboundMessage) {
       onMessage(msg);
@@ -66,6 +70,14 @@ function createHubAPI(channelName: string, onMessage: (msg: InboundMessage) => v
     },
     getNickname(senderId: string): string {
       return _getNickname(channelName, senderId);
+    },
+    recordSecurityEvent(params) {
+      onSecurityEvent({
+        channel: channelName,
+        sourceUserId: params.sourceUserId ?? "unknown",
+        contentType: params.contentType,
+        evidenceId: params.evidenceId ?? "",
+      });
     },
   };
 }
@@ -99,6 +111,7 @@ type LoadOutcome =
 async function loadPlugin(
   filePath: string,
   onMessage: (msg: InboundMessage) => void,
+  onSecurityEvent: (params: HubSecurityEventParams) => void,
 ): Promise<LoadOutcome> {
   let mod: { default?: unknown };
   try {
@@ -116,7 +129,7 @@ async function loadPlugin(
     return { kind: "helper", reason: "export default 非完整 ChannelPlugin（缺 name/start/send/stop）" };
   }
 
-  const hubAPI = createHubAPI(plugin.name, onMessage);
+  const hubAPI = createHubAPI(plugin.name, onMessage, onSecurityEvent);
   // plugin.start() 允许 throw——表示 plugin 无法正常工作（如 telegram 没 bot_token）。
   // throw 后我们不把它加入 sendMap，但 Hub 其他通道照常加载。
   try {
@@ -178,6 +191,7 @@ function syncSharedRegistry(): void {
 
 export async function loadChannels(
   onMessage: (msg: InboundMessage) => void,
+  onSecurityEvent: (params: HubSecurityEventParams) => void = () => {},
 ): Promise<LoadResult> {
   if (!fs.existsSync(CHANNELS_DIR)) {
     fs.mkdirSync(CHANNELS_DIR, { recursive: true });
@@ -195,7 +209,7 @@ export async function loadChannels(
     const hash = fileHash(filePath);
     fileHashes.set(filePath, hash);
 
-    const outcome = await loadPlugin(filePath, onMessage);
+    const outcome = await loadPlugin(filePath, onMessage, onSecurityEvent);
     if (outcome.kind === "plugin") {
       plugins.set(outcome.plugin.name, outcome.plugin);
       fileToPlugin.set(filePath, outcome.plugin.name);
@@ -216,7 +230,7 @@ export async function loadChannels(
   }
 
   // Start hot-reload watcher
-  startWatcher(onMessage);
+  startWatcher(onMessage, onSecurityEvent);
 
   // Return send-capable map + metadata for hub.ts
   // sendMap uses dynamic lookup so hot-reloaded plugins are used immediately
@@ -238,7 +252,10 @@ export async function loadChannels(
 // 开发者换插件流程：FORGE_HUB_DEV=1 bun hub.ts（或 plist 设 env 后重启）。
 // 生产用户换插件流程：改文件后 launchctl kickstart 重启 hub。
 
-function startWatcher(onMessage: (msg: InboundMessage) => void): void {
+function startWatcher(
+  onMessage: (msg: InboundMessage) => void,
+  onSecurityEvent: (params: HubSecurityEventParams) => void,
+): void {
   if (process.env.FORGE_HUB_DEV !== "1") {
     log("👁 hot-reload 已关闭（生产模式）。开发模式请设 FORGE_HUB_DEV=1 启动。");
     return;
@@ -276,7 +293,7 @@ function startWatcher(onMessage: (msg: InboundMessage) => void): void {
         // New or modified
         fileHashes.set(filePath, newHash);
 
-        const outcome = await loadPlugin(filePath, onMessage);
+        const outcome = await loadPlugin(filePath, onMessage, onSecurityEvent);
         if (outcome.kind === "plugin") {
           const plugin = outcome.plugin;
           // Stop old version if exists
@@ -331,6 +348,7 @@ function startWatcher(onMessage: (msg: InboundMessage) => void): void {
 export async function restartPlugin(
   name: string,
   onMessage: (msg: InboundMessage) => void,
+  onSecurityEvent: (params: HubSecurityEventParams) => void = () => {},
 ): Promise<boolean> {
   const plugin = plugins.get(name);
   if (!plugin) {
@@ -340,7 +358,7 @@ export async function restartPlugin(
   try {
     await stopWithTimeout(plugin, `watchdog restart ${name}`);
     plugin.stoppedReason = undefined; // clear
-    const hubAPI = createHubAPI(name, onMessage);
+    const hubAPI = createHubAPI(name, onMessage, onSecurityEvent);
     await plugin.start(hubAPI);
     log(`🔄 watchdog 重启成功: ${name}`);
     return true;

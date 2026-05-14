@@ -256,7 +256,7 @@ async function startPolling(): Promise<void> {
           if (msg.reply_to_message) contentMeta.has_reply = true;
           if (msg.media_group_id) contentMeta.media_group_id = msg.media_group_id;
 
-          recordUnauthorizedEvidence({
+          const evidence = recordUnauthorizedEvidence({
             channel: "telegram",
             ingestMode: "getUpdates",
             updateId: String(update.update_id),
@@ -268,6 +268,11 @@ async function startPolling(): Promise<void> {
             rawJson: JSON.stringify(update),
             displayName: rawDisplayName,
             logError: (m) => hub.logError(redactToken(m)),
+          });
+          hub.recordSecurityEvent({
+            sourceUserId: from?.id ? String(from.id) : chatId,
+            contentType,
+            evidenceId: evidence?.evidence_id ?? "",
           });
           continue;
         }

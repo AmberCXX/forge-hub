@@ -13,7 +13,7 @@ import { log, logError, deriveHealthStatus, getChannelHealth } from "./config.js
 import { channelPlugins } from "./channel-registry.js";
 import { getPlugin, restartPlugin } from "./channel-loader.js";
 import { RESTARTABLE_REASONS } from "./types.js";
-import type { InboundMessage } from "./types.js";
+import type { HubSecurityEventParams, InboundMessage } from "./types.js";
 
 const WATCHDOG_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 
@@ -21,7 +21,10 @@ const WATCHDOG_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
  * 启动 watchdog 定时器。main() 在 loadChannels 之后调用。
  * @param onMessage hub 的 onMessage 入口——restart 时传给 plugin.start(hubAPI)
  */
-export function startChannelWatchdog(onMessage: (msg: InboundMessage) => void): void {
+export function startChannelWatchdog(
+  onMessage: (msg: InboundMessage) => void,
+  onSecurityEvent: (params: HubSecurityEventParams) => void = () => {},
+): void {
   setInterval(async () => {
     for (const [name] of channelPlugins) {
       const plugin = getPlugin(name);
@@ -41,7 +44,7 @@ export function startChannelWatchdog(onMessage: (msg: InboundMessage) => void): 
       }
 
       log(`🔧 watchdog: 通道 ${name} unhealthy (reason=${plugin.stoppedReason})，尝试 restart...`);
-      const ok = await restartPlugin(name, onMessage);
+      const ok = await restartPlugin(name, onMessage, onSecurityEvent);
       if (ok) {
         log(`✅ watchdog: ${name} 重启成功`);
       } else {

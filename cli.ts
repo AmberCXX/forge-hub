@@ -14,12 +14,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import * as crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   parseHubStatusResponse,
   parsePublicHealthResponse,
-  splitCurlBodyAndStatus,
 } from "./forge-cli/doctor.js";
 
 const HOME = os.homedir();
@@ -31,6 +31,21 @@ const HUB_DASHBOARD_RUNTIME = path.join(HUB_DIR, "hub-dashboard");
 const LAUNCHD_PLIST = path.join(HOME, "Library", "LaunchAgents", "com.forge-hub.plist");
 const CLAUDE_JSON = path.join(HOME, ".claude.json");
 const API_TOKEN_FILE = path.join(HUB_DIR, "api-token");
+
+export const HUB_INSTALL_PRESERVE_ENTRIES = [
+  "state",
+  "hub-config.json",
+  "api-token",
+  "hub.log",
+  "hub-stderr.log",
+  "hub.pid",
+  "package",
+  "sendable",
+  "evidence",
+  "security-events.jsonl",
+  "audit.jsonl",
+  ".DS_Store",
+];
 
 // 找包根目录（从 cli.ts 的位置反推）
 const PKG_ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -65,17 +80,7 @@ function installCmd(): void {
   // redteam r2 M1: mkdirSync 带 mode 0o700，缩小 mkdir 默认 0o755 到 chmod
   // 0o700 之间的窗口（attacker 可在此毫秒级窗口写 api-token symlink 预埋）。
   fs.mkdirSync(CHANNELS_RUNTIME, { recursive: true, mode: 0o700 });
-  cleanDirContents(HUB_DIR, new Set([
-    "state",
-    "hub-config.json",
-    "api-token",
-    "hub.log",
-    "hub-stderr.log",
-    "hub.pid",
-    "package",
-    "sendable",
-    ".DS_Store",
-  ]));
+  cleanDirContents(HUB_DIR, new Set(HUB_INSTALL_PRESERVE_ENTRIES));
   cleanDirContents(CHANNELS_RUNTIME);
   const serverSrc = path.join(packageRoot, "hub-server");
   cpDir(serverSrc, HUB_DIR, [".ts", ".json", ".lock"]);
@@ -343,7 +348,24 @@ function uninstallCmd(): void {
 
 // ── doctor ──────────────────────────────────────────────────────────────────
 
-function doctorCmd(): void {
+async function fetchTextWithStatus(
+  url: string,
+  opts: { token?: string; timeoutMs?: number } = {},
+): Promise<{ body: string; status: number }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 2000);
+  try {
+    const res = await fetch(url, {
+      headers: opts.token ? { "Authorization": `Bearer ${opts.token}` } : {},
+      signal: controller.signal,
+    });
+    return { body: await res.text(), status: res.status };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function doctorCmd(): Promise<void> {
   log("🩺 Forge Hub doctor\n");
   let ok = true;
   function check(name: string, pass: boolean, hint?: string): void {
@@ -386,17 +408,14 @@ function doctorCmd(): void {
   // Hub running?
   try {
     const baseUrl = process.env.FORGE_HUB_URL ?? "http://localhost:9900";
-    const health = splitCurlBodyAndStatus(execFileSync("curl", ["-s", "-m", "2", "-w", "\n%{http_code}", `${baseUrl}/health`], { encoding: "utf-8" }));
+    const health = await fetchTextWithStatus(`${baseUrl}/health`, { timeoutMs: 2000 });
     const publicHealth = parsePublicHealthResponse(health.status, health.body);
     if (publicHealth.kind !== "online") {
       throw new Error(publicHealth.reason);
     }
 
     const token = readInstallAuthToken();
-    const statusArgs = ["-s", "-m", "2", "-w", "\n%{http_code}"];
-    if (token) statusArgs.push("-H", `Authorization: Bearer ${token}`);
-    statusArgs.push(`${baseUrl}/status`);
-    const detailed = splitCurlBodyAndStatus(execFileSync("curl", statusArgs, { encoding: "utf-8" }));
+    const detailed = await fetchTextWithStatus(`${baseUrl}/status`, { token, timeoutMs: 2000 });
     const parsed = parseHubStatusResponse(detailed.status, detailed.body);
     if (parsed.kind === "online") {
       log(`✓ Hub server running (v${parsed.version}, uptime ${Math.round(parsed.uptime / 60)}min)`);
@@ -430,7 +449,7 @@ function cpDir(src: string, dst: string, exts: string[]): void {
   }
 }
 
-function cleanDirContents(dir: string, preserve = new Set<string>()): void {
+export function cleanDirContents(dir: string, preserve = new Set<string>()): void {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir)) {
     if (preserve.has(entry)) continue;
@@ -570,57 +589,57 @@ function registerMcp(): void {
   writeClaudeJson(data);
 }
 
-function syncApiTokenFile(): void {
-  const fromEnv = process.env.HUB_API_TOKEN;
-  if (!fromEnv) {
+export function syncApiTokenFileAt(params: {
+  hubDir: string;
+  apiTokenFile: string;
+  token?: string;
+  log?: (msg: string) => void;
+}): void {
+  const { hubDir, apiTokenFile, token } = params;
+  const writeLog = params.log ?? (() => {});
+  if (!token) {
     // No env token: leave any existing file alone (user may manage it manually).
-    if (fs.existsSync(API_TOKEN_FILE)) {
-      log(`✓ API token 文件已存在（沿用）: ${API_TOKEN_FILE}`);
+    if (fs.existsSync(apiTokenFile)) {
+      writeLog(`✓ API token 文件已存在（沿用）: ${apiTokenFile}`);
     }
     return;
   }
+  fs.mkdirSync(hubDir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(hubDir, 0o700);
+
   try {
-    // redteam r2 M1: mkdirSync 带 mode 0o700 防 attacker 在 0o755 window 预埋
-    fs.mkdirSync(HUB_DIR, { recursive: true, mode: 0o700 });
-    fs.chmodSync(HUB_DIR, 0o700);
-    // redteam r2 M1: 防 symlink TOCTOU——如果 API_TOKEN_FILE 是 attacker
-    // 预埋的 symlink 指向 /tmp/xxx，writeFileSync 会 follow symlink 把 token
-    // 写到 attacker 可读位置。lstatSync 不 follow symlink；如果是 symlink
-    // 或非常规文件就 unlink 再写。
-    try {
-      const lst = fs.lstatSync(API_TOKEN_FILE);
-      if (lst.isSymbolicLink() || !lst.isFile()) {
-        fs.unlinkSync(API_TOKEN_FILE);
-      }
-    } catch {
-      // ENOENT 正常（首次 install），继续
+    const lst = fs.lstatSync(apiTokenFile);
+    if (lst.isSymbolicLink()) {
+      fs.unlinkSync(apiTokenFile);
+    } else if (!lst.isFile()) {
+      throw new Error(`${apiTokenFile} 已存在但不是普通文件，请手动处理后重跑 install`);
     }
-    // O_EXCL 排他创建做双保险：刚 unlink 完的瞬间若被 attacker 重新预埋会 EEXIST
-    try {
-      fs.writeFileSync(API_TOKEN_FILE, fromEnv, { mode: 0o600, flag: "wx" });
-    } catch (err) {
-      // 用 inline 类型取 code，避免依赖 NodeJS.ErrnoException namespace
-      // （项目没装 @types/node，bun 环境下 namespace 不可用）
-      //
-      // redteam r3 verification: EEXIST 分支必须 fail-closed, 不能 fallback
-      // 覆盖写。原实现走 fallback writeFileSync(无 wx) 是错的——lstat 发生在
-      // wx 之前，从 wx EEXIST 到 fallback 之间是**新 race 窗口**，attacker
-      // 可在此窗口重建 symlink 诱导 fallback follow。直接 throw 让调用方
-      // 人工处理是 tight fix（红队 verification.md §M1 tight-fix 建议）。
-      if ((err as { code?: string })?.code === "EEXIST") {
-        throw new Error(
-          `${API_TOKEN_FILE} 在 lstat 后被重建（可能是 race / 另一个 install 并发跑 / attacker 抢注）。\n` +
-          `请手动清理后重跑 install:\n` +
-          `  rm -f ${API_TOKEN_FILE}\n` +
-          `  forge-hub install`
-        );
-      }
-      throw err;
-    }
-    fs.chmodSync(API_TOKEN_FILE, 0o600);
-    log(`✓ API token 写入 ${API_TOKEN_FILE}（chmod 600，防 symlink TOCTOU，MCP 子进程将从此文件读 token）`);
   } catch (err) {
-    console.warn(`⚠️  API token 写入失败: ${String(err)}\n   手动创建: echo -n $HUB_API_TOKEN > ${API_TOKEN_FILE} && chmod 600 $_`);
+    if ((err as { code?: string })?.code !== "ENOENT") throw err;
+  }
+
+  const tmp = path.join(hubDir, `.api-token.tmp.${process.pid}.${crypto.randomUUID()}`);
+  try {
+    fs.writeFileSync(tmp, token, { encoding: "utf-8", mode: 0o600, flag: "wx" });
+    fs.renameSync(tmp, apiTokenFile);
+    fs.chmodSync(apiTokenFile, 0o600);
+    writeLog(`✓ API token 写入 ${apiTokenFile}（chmod 600，原子替换，MCP 子进程将从此文件读 token）`);
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch {}
+    throw err;
+  }
+}
+
+function syncApiTokenFile(): void {
+  try {
+    syncApiTokenFileAt({
+      hubDir: HUB_DIR,
+      apiTokenFile: API_TOKEN_FILE,
+      token: process.env.HUB_API_TOKEN,
+      log,
+    });
+  } catch (err) {
+    die(`API token 写入失败: ${String(err)}\n   请确认 ${HUB_DIR} 权限正常后重跑 forge-hub install。`);
   }
 }
 
@@ -655,21 +674,22 @@ function isMcpRegistered(): boolean {
 
 // ── dispatch ────────────────────────────────────────────────────────────────
 
-const cmd = process.argv[2];
-switch (cmd) {
-  case "install":
-    installCmd();
-    break;
-  case "uninstall":
-    uninstallCmd();
-    break;
-  case "doctor":
-    doctorCmd();
-    break;
-  case "--help":
-  case "-h":
-  case undefined:
-    log(`forge-hub — Multi-channel messaging hub for Claude Code
+if (import.meta.main) {
+  const cmd = process.argv[2];
+  switch (cmd) {
+    case "install":
+      installCmd();
+      break;
+    case "uninstall":
+      uninstallCmd();
+      break;
+    case "doctor":
+      await doctorCmd();
+      break;
+    case "--help":
+    case "-h":
+    case undefined:
+      log(`forge-hub — Multi-channel messaging hub for Claude Code
 
 USAGE:
   forge-hub <command>
@@ -690,7 +710,8 @@ DOCS:
   部署.md — 详细部署步骤（手动方案）
   hub-docs/channel-plugin-guide.md — 写新通道插件
 `);
-    break;
-  default:
-    die(`未知命令: ${cmd}。试 forge-hub --help`);
+      break;
+    default:
+      die(`未知命令: ${cmd}。试 forge-hub --help`);
+  }
 }

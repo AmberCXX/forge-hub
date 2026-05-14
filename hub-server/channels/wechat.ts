@@ -220,19 +220,13 @@ async function startPolling(): Promise<void> {
 
         const senderId = msg.from_user_id ?? "unknown";
 
-        if (msg.context_token) {
-          const tokens = (hub.getState("context-tokens") ?? {}) as Record<string, string>;
-          tokens[senderId] = msg.context_token;
-          hub.setState("context-tokens", tokens);
-        }
-
         if (!hub.isAllowed(senderId)) {
           const contentType = content.includes("[图片]") ? "image"
             : content.includes("[语音]") ? "voice"
             : content.includes("[文件]") ? "file"
             : content ? "text" : "unknown";
 
-          recordUnauthorizedEvidence({
+          const evidence = recordUnauthorizedEvidence({
             channel: "wechat",
             ingestMode: "polling",
             updateId: msg.message_id ?? "",
@@ -245,7 +239,18 @@ async function startPolling(): Promise<void> {
             displayName: senderId,
             logError: (m) => hub.logError(m),
           });
+          hub.recordSecurityEvent({
+            sourceUserId: senderId,
+            contentType,
+            evidenceId: evidence?.evidence_id ?? "",
+          });
           continue;
+        }
+
+        if (msg.context_token) {
+          const tokens = (hub.getState("context-tokens") ?? {}) as Record<string, string>;
+          tokens[senderId] = msg.context_token;
+          hub.setState("context-tokens", tokens);
         }
 
         const nick = hub.getNickname(senderId);

@@ -94,6 +94,23 @@ async function hubGet(endpoint: string): Promise<unknown> {
   }
 }
 
+async function hubGetOptional(endpoint: string, timeoutMs = 2000): Promise<unknown | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${HUB_URL}${endpoint}`, {
+      headers: authHeaders(),
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function hubPost(endpoint: string, body: Record<string, unknown>): Promise<unknown> {
   try {
     const res = await fetch(`${HUB_URL}${endpoint}`, {
@@ -1224,7 +1241,7 @@ function hubSecurity(args: string[]): void {
 
 // ── hub ps ──────────────────────────────────────────────────────────────────
 
-function hubPs(): void {
+async function hubPs(): Promise<void> {
   const CLIENT_LOG = path.join(HUB_DIR, "hub-client.log");
 
   // 1. 拿当前活着的 hub-channel PID
@@ -1271,11 +1288,11 @@ function hubPs(): void {
 
   // 3. 从 Hub API 拿在线实例
   let hubInstances: { id: string; channels?: string[]; description?: string; presence?: string }[] = [];
-  try {
-    const res = execFileSync("/usr/bin/curl", ["-s", "--connect-timeout", "2", `${HUB_URL}/instances`, ...( HUB_API_TOKEN ? ["-H", `Authorization: Bearer ${HUB_API_TOKEN}`] : [])], { encoding: "utf-8" });
-    const data = JSON.parse(res);
+  const instancesData = await hubGetOptional("/instances");
+  if (instancesData) {
+    const data = instancesData as { instances?: typeof hubInstances };
     hubInstances = data.instances ?? [];
-  } catch {}
+  }
 
   // 4. 输出
   console.log(`hub-channel 进程 (${livePids.size} 个):\n`);
@@ -1301,11 +1318,11 @@ function hubPs(): void {
   }
 
   // 6. Hub server
-  try {
-    const res = execFileSync("/usr/bin/curl", ["-s", "--connect-timeout", "2", `${HUB_URL}/health`, ...(HUB_API_TOKEN ? ["-H", `Authorization: Bearer ${HUB_API_TOKEN}`] : [])], { encoding: "utf-8" });
-    const h = JSON.parse(res);
+  const health = await hubGetOptional("/health");
+  if (health) {
+    const h = health as { uptime?: unknown; locked?: unknown };
     console.log(`\nHub server: uptime ${h.uptime}s  locked=${h.locked}`);
-  } catch {
+  } else {
     console.log("\nHub server: 不可达");
   }
 }
@@ -1325,7 +1342,7 @@ if (domain === "hub") {
     case "resolve": await hubResolve(rest); break;
     case "approval-audit": await hubApprovalAudit(rest); break;
     case "self-test": await hubSelfTest(); break;
-    case "ps": hubPs(); break;
+    case "ps": await hubPs(); break;
     case "security": hubSecurity(rest); break;
     case "replay": await hubReplay(rest); break;
     case "send": await hubSend(rest); break;

@@ -100,9 +100,27 @@ function currentMonthFile(): string {
   return path.join(getEvidenceDir(), `evidence_${ym}.jsonl`);
 }
 
-function computeEntryHash(prevHash: string | null, record: Record<string, unknown>): string {
-  const sortedKeys = Object.keys(record).sort();
-  const canonical = JSON.stringify(record, sortedKeys);
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => canonicalize(item));
+  }
+  if (value && typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      out[key] = canonicalize(source[key]);
+    }
+    return out;
+  }
+  return value;
+}
+
+export function stableStringify(value: unknown): string {
+  return JSON.stringify(canonicalize(value));
+}
+
+export function computeEntryHash(prevHash: string | null, record: Record<string, unknown>): string {
+  const canonical = stableStringify(record);
   const payload = (prevHash ?? "") + canonical;
   return crypto.createHash("sha256").update(payload).digest("hex");
 }
@@ -226,9 +244,10 @@ export interface RecordUnauthorizedOpts {
   logError: (msg: string) => void;
 }
 
-export function recordUnauthorizedEvidence(opts: RecordUnauthorizedOpts): void {
+export function recordUnauthorizedEvidence(opts: RecordUnauthorizedOpts): EvidenceRecord | null {
+  let record: EvidenceRecord | null = null;
   try {
-    appendEvidence({
+    record = appendEvidence({
       received_at: new Date().toISOString(),
       channel: opts.channel,
       ingest_mode: opts.ingestMode,
@@ -254,4 +273,5 @@ export function recordUnauthorizedEvidence(opts: RecordUnauthorizedOpts): void {
 
   const safe = sanitizeDisplayName(opts.displayName);
   opts.logError(`⛔ 拒绝未授权: ${safe.displayValue} (${opts.chatId}), 类型: ${opts.contentType}`);
+  return record;
 }

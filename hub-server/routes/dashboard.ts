@@ -32,7 +32,7 @@ export function hasDashboardSession(req: Request, apiToken: string): boolean {
 }
 
 export function trustedDashboardOrigins(url: URL): Set<string> {
-  const origins = new Set<string>([url.origin]);
+  const origins = new Set<string>();
   const port = url.port ? `:${url.port}` : "";
   origins.add(`${url.protocol}//localhost${port}`);
   origins.add(`${url.protocol}//127.0.0.1${port}`);

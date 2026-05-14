@@ -241,7 +241,7 @@ async function handleMessage(event: Record<string, unknown>): Promise<void> {
     const fileKey = (event.file_key ?? "") as string;
     if (fileKey) contentMeta.file_key = fileKey;
 
-    recordUnauthorizedEvidence({
+    const evidence = recordUnauthorizedEvidence({
       channel: "feishu",
       ingestMode: "stdio",
       updateId: messageId || "",
@@ -253,6 +253,11 @@ async function handleMessage(event: Record<string, unknown>): Promise<void> {
       rawJson: JSON.stringify(event),
       displayName: senderId,
       logError: (m) => hub.logError(m),
+    });
+    hub.recordSecurityEvent({
+      sourceUserId: senderId,
+      contentType: msgType,
+      evidenceId: evidence?.evidence_id ?? "",
     });
     return;
   }

@@ -177,6 +177,24 @@ export interface HubAPI {
   isAllowed(senderId: string): boolean;
   /** 获取 sender 的昵称（不在 allowlist 中则返回 id 截取） */
   getNickname(senderId: string): string;
+  /**
+   * 记录通道第一层拦截到的安全事件。
+   * channel name 由 HubAPI factory 从 closure 注入，通道只传外部 sender/内容类别/证据 id。
+   */
+  recordSecurityEvent(params: ChannelSecurityEventParams): void;
+}
+
+export interface ChannelSecurityEventParams {
+  sourceUserId: string | null;
+  contentType: string;
+  evidenceId?: string | null;
+}
+
+export interface HubSecurityEventParams {
+  channel: string;
+  sourceUserId: string;
+  contentType: string;
+  evidenceId: string;
 }
 
 // ── 通道 Allowlist（所有通道共享 schema） ──────────────────────────────────

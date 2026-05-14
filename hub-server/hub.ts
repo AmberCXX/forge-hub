@@ -39,7 +39,7 @@ import { drainQueuedWrites } from "./write-queue.js";
 // instance 侧就永远挂死。持久化到 state/_hub/pending.json，重启时恢复 Map + idLookup。
 // 每次 pending 变动（登记/清理/超时）后全量覆盖写——pending 数不会多，无性能问题。
 
-import type { HubConfig, InboundHandleResult, InboundMessage } from "./types.js";
+import type { HubConfig, HubSecurityEventParams, InboundHandleResult, InboundMessage } from "./types.js";
 
 import {
   pendingPermissions,
@@ -120,6 +120,10 @@ const securityAggregator = new SecurityEventAggregator((alertText) => {
   }
 });
 
+function recordSecurityEvent(params: HubSecurityEventParams): void {
+  securityAggregator.recordUnauthorized(params);
+}
+
 // 外壳：hub 内部的 route/filter/push 若 throw，不冒到调 pushMessage 的 channel 层。
 // channel 的 polling loop 一般有 try/catch 兜底，但 imessage setInterval / feishu readline
 // 是"事件回调"形态——同步 throw 会冒到 uncaughtException。这层包裹 = Hub 自身的 fail-safe。
@@ -170,7 +174,7 @@ function onMessageImpl(msg: InboundMessage): InboundHandleResult {
         `🚨 第二道防线触发：未授权消息进到 onMessage（第一道过滤失效！）` +
           `channel=${msg.channel} authSenderId=${senderCheck.authSenderId} from=${safeName.displayValue}`,
       );
-      securityAggregator.recordUnauthorized({
+      recordSecurityEvent({
         channel: msg.channel,
         sourceUserId: senderCheck.authSenderId,
         contentType: "unknown",
@@ -559,7 +563,7 @@ async function main() {
   setOnMessage(onMessage);
 
   // Load channel plugins
-  const loaded = await loadChannels(onMessage);
+  const loaded = await loadChannels(onMessage, recordSecurityEvent);
   populateRegistry(loaded.sendMap, loaded.metaMap);
 
   for (const channelName of loaded.sendMap.keys()) {
@@ -570,7 +574,7 @@ async function main() {
   }
 
   // Channel watchdog: 每 2 分钟检查 unhealthy 通道并自动 restart
-  startChannelWatchdog(onMessage);
+  startChannelWatchdog(onMessage, recordSecurityEvent);
 
   // Register onReady callback: push history + context when client sends "ready"
   setOnReadyCallback((instanceId, historyConfig) => {
