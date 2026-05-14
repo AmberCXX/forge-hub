@@ -17,6 +17,7 @@ import { createInterface } from "node:readline";
 import { execFileText } from "../process-utils.js";
 import { assertRealPathInsideDir, sanitizeMediaFileName } from "../media-path.js";
 import { assertFileWithinMediaSizeLimit } from "../media-policy.js";
+import { recordUnauthorizedEvidence } from "../evidence.js";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -233,14 +234,25 @@ async function handleMessage(event: Record<string, unknown>): Promise<void> {
   const isAuthorizedGroup = isGroupMessage && hub.isAllowed(chatId);
   const isAuthorizedDirect = !isGroupMessage && hub.isAllowed(senderId);
   if (!isAuthorizedDirect && !isAuthorizedGroup) {
-    const rawPreview = (event.content ?? "") as string;
-    hub.logError(`⛔ 拒绝未授权: ${senderId}, 原文前 50: "${rawPreview.slice(0, 50)}"`);
-    hub.pushMessage({
+    const messageId = (event.message_id ?? event.id ?? "") as string;
+    const contentMeta: Record<string, unknown> = { content_type: msgType };
+    if (messageId) contentMeta.message_id = messageId;
+    if (chatType) contentMeta.chat_type = chatType;
+    const fileKey = (event.file_key ?? "") as string;
+    if (fileKey) contentMeta.file_key = fileKey;
+
+    recordUnauthorizedEvidence({
       channel: "feishu",
-      from: "system",
-      fromId: "system",
-      content: hub.formatUnauthorizedNotice(senderId, senderId, rawPreview),
-      raw: {},
+      ingestMode: "stdio",
+      updateId: messageId || "",
+      chatId,
+      messageId: messageId || null,
+      sourceUserId: senderId,
+      contentType: msgType,
+      contentMeta,
+      rawJson: JSON.stringify(event),
+      displayName: senderId,
+      logError: (m) => hub.logError(m),
     });
     return;
   }

@@ -13,6 +13,7 @@ import { getUpdates, sendText, getConfig, sendTyping } from "./wechat-ilink.js";
 import { uploadAndSendMedia, sendTtsAsMp3File, downloadMediaItem } from "./wechat-media.js";
 import { STATE_DIR, redactSensitive } from "../config.js";
 import { ChannelHealth } from "../channel-health.js";
+import { recordUnauthorizedEvidence } from "../evidence.js";
 import path from "node:path";
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -226,13 +227,23 @@ async function startPolling(): Promise<void> {
         }
 
         if (!hub.isAllowed(senderId)) {
-          hub.logError(`⛔ 拒绝未授权 sender: ${senderId}, 内容前 50 字符: "${content.slice(0, 50)}"`);
-          hub.pushMessage({
+          const contentType = content.includes("[图片]") ? "image"
+            : content.includes("[语音]") ? "voice"
+            : content.includes("[文件]") ? "file"
+            : content ? "text" : "unknown";
+
+          recordUnauthorizedEvidence({
             channel: "wechat",
-            from: "system",
-            fromId: "system",
-            content: hub.formatUnauthorizedNotice(senderId, senderId, content),
-            raw: {},
+            ingestMode: "polling",
+            updateId: msg.message_id ?? "",
+            chatId: senderId,
+            messageId: msg.message_id ? String(msg.message_id) : null,
+            sourceUserId: senderId,
+            contentType,
+            contentMeta: { content_type: contentType },
+            rawJson: JSON.stringify(msg),
+            displayName: senderId,
+            logError: (m) => hub.logError(m),
           });
           continue;
         }

@@ -9,6 +9,7 @@ import { ChannelStartSkipError } from "../types.js";
 import type { ChannelPlugin, HubAPI, SendResult } from "../types.js";
 import { ChannelHealth } from "../channel-health.js";
 import { isNetworkError, SEND_RETRY_DELAY_MS } from "../send-retry.js";
+import { recordUnauthorizedEvidence } from "../evidence.js";
 import fsMod from "node:fs";
 import pathMod from "node:path";
 import { assertRealPathInsideDir, sanitizeMediaFileName } from "../media-path.js";
@@ -217,16 +218,56 @@ async function startPolling(): Promise<void> {
 
         const chatId = String(msg.chat.id);
         const from = msg.from;
-        const displayName = [from?.first_name, from?.last_name].filter(Boolean).join(" ") || from?.username || chatId;
+        const rawDisplayName = [from?.first_name, from?.last_name].filter(Boolean).join(" ") || from?.username || chatId;
 
         if (!hub.isAllowed(chatId)) {
-          hub.logError(`⛔ 拒绝未授权: ${displayName} (${chatId}), 原文前 50: "${(msg.text ?? "[非文本]").slice(0, 50)}"`);
-          hub.pushMessage({
+          const contentType = msg.text ? "text" : msg.photo ? "photo" : msg.document ? "document"
+            : msg.voice ? "voice" : msg.sticker ? "sticker" : msg.video ? "video"
+            : msg.animation ? "animation" : msg.contact ? "contact" : msg.location ? "location" : "unknown";
+          const contentMeta: Record<string, unknown> = { content_type: contentType };
+          if (msg.document) {
+            contentMeta.file_id = msg.document.file_id;
+            contentMeta.file_unique_id = msg.document.file_unique_id;
+            contentMeta.file_name = msg.document.file_name;
+            contentMeta.mime_type = msg.document.mime_type;
+            contentMeta.file_size = msg.document.file_size;
+          } else if (msg.photo) {
+            const largest = msg.photo[msg.photo.length - 1];
+            contentMeta.file_id = largest.file_id;
+            contentMeta.file_unique_id = largest.file_unique_id;
+            contentMeta.file_size = largest.file_size;
+          } else if (msg.voice) {
+            contentMeta.file_id = msg.voice.file_id;
+            contentMeta.file_unique_id = msg.voice.file_unique_id;
+            contentMeta.mime_type = msg.voice.mime_type;
+            contentMeta.file_size = msg.voice.file_size;
+          } else if (msg.sticker) {
+            contentMeta.file_id = msg.sticker.file_id;
+            contentMeta.file_unique_id = msg.sticker.file_unique_id;
+            contentMeta.emoji = msg.sticker.emoji;
+          } else if (msg.video) {
+            contentMeta.file_id = msg.video.file_id;
+            contentMeta.file_unique_id = msg.video.file_unique_id;
+            contentMeta.mime_type = msg.video.mime_type;
+            contentMeta.file_size = msg.video.file_size;
+          }
+          if (msg.caption) contentMeta.caption_length = msg.caption.length;
+          if (msg.forward_origin) contentMeta.has_forward_origin = true;
+          if (msg.reply_to_message) contentMeta.has_reply = true;
+          if (msg.media_group_id) contentMeta.media_group_id = msg.media_group_id;
+
+          recordUnauthorizedEvidence({
             channel: "telegram",
-            from: "system",
-            fromId: "system",
-            content: hub.formatUnauthorizedNotice(displayName, chatId, msg.text ?? "[非文本]"),
-            raw: {},
+            ingestMode: "getUpdates",
+            updateId: String(update.update_id),
+            chatId,
+            messageId: msg.message_id ? String(msg.message_id) : null,
+            sourceUserId: from?.id ? String(from.id) : null,
+            contentType,
+            contentMeta,
+            rawJson: JSON.stringify(update),
+            displayName: rawDisplayName,
+            logError: (m) => hub.logError(redactToken(m)),
           });
           continue;
         }
@@ -257,11 +298,11 @@ async function startPolling(): Promise<void> {
         }
 
         msgCount++;
-        hub.log(`← ${displayName}: ${content.slice(0, 80)}${content.length > 80 ? "..." : ""}`);
+        hub.log(`← ${rawDisplayName}: ${content.slice(0, 80)}${content.length > 80 ? "..." : ""}`);
 
         hub.pushMessage({
           channel: "telegram",
-          from: displayName,
+          from: rawDisplayName,
           fromId: chatId,
           content,
           raw: { message_id: msg.message_id, username: from?.username ?? "" },

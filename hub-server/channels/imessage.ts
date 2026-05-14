@@ -13,6 +13,7 @@ import { ChannelStartSkipError } from "../types.js";
 import type { ChannelPlugin, HubAPI, SendResult } from "../types.js";
 import { redactSensitive } from "../config.js";
 import { ChannelHealth } from "../channel-health.js";
+import { recordUnauthorizedEvidence } from "../evidence.js";
 import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -218,13 +219,32 @@ async function pollInner(): Promise<void> {
     // Allowlist check (self-chat bypasses)
     if (!isSelfChat) {
       if (!isAuthorizedDirect && !isAuthorizedGroup) {
-        hub.logError(`⛔ 拒绝未授权: ${sender}, 原文前 50: "${(text || "[非文本]").slice(0, 50)}"`);
-        hub.pushMessage({
+        const contentType = text ? "text" : r.cache_has_attachments ? "attachment" : "unknown";
+        const contentMeta: Record<string, unknown> = {
+          content_type: contentType,
+          has_attachments: !!r.cache_has_attachments,
+        };
+        if (r.chat_style != null) contentMeta.chat_style = r.chat_style;
+
+        const rawData: Record<string, unknown> = {
+          rowid: r.rowid, handle_id: r.handle_id, chat_guid: r.chat_guid,
+          date: r.date, is_from_me: r.is_from_me,
+          cache_has_attachments: r.cache_has_attachments, chat_style: r.chat_style,
+        };
+        if (text) rawData.text_length = text.length;
+
+        recordUnauthorizedEvidence({
           channel: "imessage",
-          from: "system",
-          fromId: "system",
-          content: hub.formatUnauthorizedNotice(sender, sender, text || "[非文本]"),
-          raw: {},
+          ingestMode: "polling",
+          updateId: String(r.rowid),
+          chatId: r.chat_guid,
+          messageId: String(r.rowid),
+          sourceUserId: sender,
+          contentType,
+          contentMeta,
+          rawJson: JSON.stringify(rawData),
+          displayName: sender,
+          logError: (m) => hub.logError(m),
         });
         continue;
       }

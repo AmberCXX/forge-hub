@@ -23,11 +23,12 @@ import {
   isLocked,
   log,
   logError,
-  formatUnauthorizedNotice,
   appendAudit,
   auditAllowlistPerms,
 } from "./config.js";
 import { loadChannels, stopAllChannels } from "./channel-loader.js";
+import { SecurityEventAggregator } from "./security-event.js";
+import { sanitizeDisplayName } from "./sanitize.js";
 import { setOnReadyCallback, getInstances, pushToInstances } from "./instance-manager.js";
 import { route } from "./router.js";
 import { drainQueuedWrites } from "./write-queue.js";
@@ -102,6 +103,23 @@ function validateAuthorizedSender(msg: InboundMessage): AllowlistGuardResult {
   };
 }
 
+// ── Security Event Aggregator ──────────────────────────────────────────────
+
+const securityAggregator = new SecurityEventAggregator((alertText) => {
+  const targetIds = [...getInstances().keys()];
+  if (targetIds.length > 0) {
+    pushToInstances(targetIds, {
+      type: "message",
+      channel: "_security",
+      from: "system",
+      fromId: "system",
+      content: alertText,
+      targeted: false,
+      raw: {},
+    });
+  }
+});
+
 // 外壳：hub 内部的 route/filter/push 若 throw，不冒到调 pushMessage 的 channel 层。
 // channel 的 polling loop 一般有 try/catch 兜底，但 imessage setInterval / feishu readline
 // 是"事件回调"形态——同步 throw 会冒到 uncaughtException。这层包裹 = Hub 自身的 fail-safe。
@@ -147,43 +165,24 @@ function onMessageImpl(msg: InboundMessage): InboundHandleResult {
       };
     }
     if (!senderCheck.isAllowed) {
+      const safeName = sanitizeDisplayName(msg.from);
       logError(
         `🚨 第二道防线触发：未授权消息进到 onMessage（第一道过滤失效！）` +
-          `channel=${msg.channel} authSenderId=${senderCheck.authSenderId} from=${msg.from} ` +
-          `content=${JSON.stringify(msg.content.slice(0, 200))}`,
+          `channel=${msg.channel} authSenderId=${senderCheck.authSenderId} from=${safeName.displayValue}`,
       );
-      // Push 抗 injection 的 system 告警让Forge 察觉
-      const notice = formatUnauthorizedNotice(msg.channel, msg.from, senderCheck.authSenderId, msg.content);
-      const alertMsg: InboundMessage = {
+      securityAggregator.recordUnauthorized({
         channel: msg.channel,
-        from: "system",
-        fromId: "system",
-        content: `[🚨 第二道防线告警]\n${notice}`,
-        raw: {},
-      };
-      // 走普通路由把告警推给订阅了该通道的所有 instance（system 消息在下面的 system fromId 分支免疫此 check）
+        sourceUserId: senderCheck.authSenderId,
+        contentType: "unknown",
+        evidenceId: "",
+      });
       appendHistory(msg.channel, "in", "system", "[🚨 第二道防线: 未授权消息]");
       recordInbound(msg.channel);
-      if (!isLocked()) {
-        const result = route(alertMsg, getInstances(), getCurrentConfig());
-        const filtered = filterBySubscription(result.targets, msg.channel, result.targeted);
-        if (filtered.length > 0) {
-          pushToInstances(filtered, {
-            type: "message",
-            channel: msg.channel,
-            from: "system",
-            fromId: "system",
-            content: alertMsg.content,
-            targeted: false,
-            raw: {},
-          });
-        }
-      }
       return {
         accepted: false,
         reason: "unauthorized_sender",
         detail: `${senderCheck.authSenderId} 未在 allowlist 中`,
-      }; // 丢弃原消息，绝不路由给Forge
+      };
     }
   }
 
@@ -633,6 +632,7 @@ async function main() {
     log(`运行 ${uptime}s · 收 ${totalIn} 条 · 发 ${totalOut} 条`);
     log("────────────────────────────────────────");
     await stopAllChannels();
+    securityAggregator.flushAndStop();
     removePid();
     await drainQueuedWrites();
     process.exit(0);
