@@ -285,12 +285,14 @@ export default function App() {
 
   // ── Adapt Hub data → Design data format ────────────────────────────────
 
+  const allLoadedChannelIds = useMemo(() => Object.keys(channelHealth), [channelHealth]);
+
   const ais = useMemo(() => {
     if (nativeMode && nativeSessions.length > 0) {
-      return nativeSessions.map((s, i) => adaptNativeSession(s, i));
+      return nativeSessions.map((s, i) => adaptNativeSession(s, i, allLoadedChannelIds));
     }
-    return instances.map((inst, i) => adaptInstance(inst, i));
-  }, [nativeMode, nativeSessions, instances]);
+    return instances.map((inst, i) => adaptInstance(inst, i, allLoadedChannelIds));
+  }, [nativeMode, nativeSessions, instances, allLoadedChannelIds]);
 
   const channels = useMemo(() =>
     Object.entries(channelHealth).map(([id, h]) => adaptChannel(id, h)),

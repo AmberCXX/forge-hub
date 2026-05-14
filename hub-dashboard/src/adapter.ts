@@ -70,7 +70,7 @@ function ago(isoStr?: string): string {
   return `${Math.floor(ms / 86400_000)}天前`;
 }
 
-export function adaptInstance(inst: Instance, index: number): DesignAI {
+export function adaptInstance(inst: Instance, index: number, allLoadedChannelIds: string[] = []): DesignAI {
   const name = inst.description || inst.tag || inst.id.slice(0, 10);
   const isChannel = inst.isChannel !== false;
   return {
@@ -85,7 +85,7 @@ export function adaptInstance(inst: Instance, index: number): DesignAI {
       : "仅工具 · 不接收消息",
     mood: "calm",
     uptime: formatUptime(inst.connectedAt),
-    channels: inst.channels ?? [],
+    channels: inst.channels ?? allLoadedChannelIds,
     seed: hashSeed(inst.id),
     shape: SHAPES[index % SHAPES.length],
     lastMessageAt: ago(inst.connectedAt),

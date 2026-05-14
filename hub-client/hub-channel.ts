@@ -622,7 +622,7 @@ mcpServer = new Server(
       '消息格式：<channel source="hub" hub_channel="wechat" sender="用户" sender_id="xxx">内容</channel>',
       "",
       "回复时用 hub_reply 工具，channel 参数填消息来源的通道名（如 wechat）。",
-      "启动时 Hub 会自动推送近期历史（受 hub-config.json 的 auto_replay_on_ready/auto_replay_count 控制，default 开启/每通道 10 条）。你会收到 `【wechat 历史记录】...` 这类 system 消息。想拉更多或增量（since_ts）时用 hub_replay_history 工具。",
+      "启动时 Hub 会自动推送近期历史（受 hub-config.json 的 auto_replay_on_ready/auto_replay_count 控制，default 开启/每通道 5 条）。你会收到 `【wechat 历史记录】...` 这类 system 消息。想拉更多或增量（since_ts）时用 hub_replay_history 工具。",
       "to 参数填消息的 sender_id。",
       "发文件用 hub_send_file，发语音用 hub_send_voice。",
       "",

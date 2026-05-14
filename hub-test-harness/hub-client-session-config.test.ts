@@ -24,12 +24,12 @@ afterEach(() => {
 });
 
 describe("hub client session config", () => {
-  test("defaults to channel mode with all channels when no launcher state exists", () => {
+  test("returns null when no launcher state exists so callers can auto-detect mode", () => {
     const hubDir = mkHubDir();
     const config = readAndClearSessionConfig(getSessionConfigPaths(hubDir), "forge-123", () => {});
 
-    expect(config?.channels).toEqual(["all"]);
-    expect(isChannelMode(config)).toBe(true);
+    expect(config).toBeNull();
+    expect(isChannelMode(config)).toBe(false);
   });
 
   test("treats explicit next-session without channels as tool mode", () => {

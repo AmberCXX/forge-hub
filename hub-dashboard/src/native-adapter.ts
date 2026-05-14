@@ -49,23 +49,24 @@ function sessionUptime(ts: number): string {
   return `${h}h ${m}m`;
 }
 
-export function adaptNativeSession(s: NativeSession, index: number): DesignAI {
+export function adaptNativeSession(s: NativeSession, index: number, allLoadedChannelIds: string[] = []): DesignAI {
   const name = s.description || s.hubDesc || s.display;
   const alias = s.tag || s.hubTag || null;
+  const isChannel = s.isActive ? (s.isChannel ?? false) : false;
 
   return {
     id: s.sid,
     name: name || s.display,
     alias,
     role: "",
-    isChannel: s.isActive ? (s.isChannel ?? false) : false,
+    isChannel,
     status: s.isActive ? "online" : "offline",
     statusText: s.isActive
       ? (s.isChannel ? "在线" : "在线 · 仅工具")
       : "离线",
     mood: "calm",
     uptime: s.isActive ? sessionUptime(s.timestamp) : "—",
-    channels: s.channels ?? [],
+    channels: s.channels ?? (isChannel ? allLoadedChannelIds : []),
     seed: hashSeed(s.sid),
     shape: SHAPES[index % SHAPES.length],
     lastMessageAt: ago(s.timestamp),

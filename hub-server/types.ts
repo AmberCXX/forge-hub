@@ -28,7 +28,7 @@ export interface HubConfig {
    */
   auto_replay_on_ready?: boolean;
   /**
-   * 自动 replay 时每通道推送的条数上限（default 10）。之前硬编码 100——对用户的 CC context 太重。
+   * 自动 replay 时每通道推送的条数上限（default 5）。之前硬编码 100——对用户的 CC context 太重。
    * 设成 0 = 不推这个通道（等价于 auto_replay_on_ready: false 对某个通道生效）。
    */
   auto_replay_count?: number;
