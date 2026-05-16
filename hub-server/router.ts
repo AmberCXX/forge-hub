@@ -5,6 +5,7 @@
  */
 
 import type { InboundMessage, ConnectedInstance, HubConfig } from "./types.js";
+import { getChannelInstanceCount } from "./instance-manager.js";
 
 // ── Route Result ────────────────────────────────────────────────────────────
 
@@ -263,12 +264,11 @@ export function route(
 export function addReplyTag(
   text: string,
   instanceId: string,
-  instanceCount: number,
   config: HubConfig,
   instances: Map<string, ConnectedInstance>,
 ): string {
   if (!config.show_instance_tag) return text;
-  if (instanceCount <= 1) return text;
+  if (getChannelInstanceCount() <= 1) return text;
 
   const inst = instances.get(instanceId);
   const desc = inst?.description;

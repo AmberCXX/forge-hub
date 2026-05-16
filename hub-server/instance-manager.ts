@@ -98,6 +98,12 @@ export function getInstances(): Map<string, ConnectedInstance> {
   return instances;
 }
 
+export function getChannelInstanceCount(): number {
+  let n = 0;
+  for (const inst of instances.values()) if (inst.isChannel !== false) n++;
+  return n;
+}
+
 function rankKnownInstance(instance: KnownInstance): number {
   if (instance.presence === "live") return 0;
   if (instance.isChannel !== false) return 1;

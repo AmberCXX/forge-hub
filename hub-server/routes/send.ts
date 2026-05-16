@@ -102,7 +102,7 @@ export async function handleSend(req: Request): Promise<Response> {
 
   return await handleSendRequest(body, async (to, contextToken) => {
     const instances = getInstances();
-    const taggedText = addReplyTag(body.text, body.instance ?? "", instances.size, getCurrentConfig(), instances);
+    const taggedText = addReplyTag(body.text, body.instance ?? "", getCurrentConfig(), instances);
     const senderInstance = instances.get(body.instance ?? "");
     return {
       to, content: taggedText, type: "text" as const,
