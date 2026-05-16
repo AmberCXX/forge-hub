@@ -35,8 +35,13 @@ const API_TOKEN_FILE = path.join(HUB_DIR, "api-token");
 export const HUB_INSTALL_PRESERVE_ENTRIES = [
   "state",
   "hub-config.json",
+  "lock-phrase.json",
+  "lock.json",
   "api-token",
   "hub.log",
+  "hub.log.1",
+  "hub.log.2",
+  "hub.log.3",
   "hub-stderr.log",
   "hub.pid",
   "package",
@@ -44,6 +49,8 @@ export const HUB_INSTALL_PRESERVE_ENTRIES = [
   "evidence",
   "security-events.jsonl",
   "audit.jsonl",
+  "engine-data",
+  "hub-client.log",
   ".DS_Store",
 ];
 
