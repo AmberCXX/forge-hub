@@ -47,6 +47,10 @@ export const HUB_INSTALL_PRESERVE_ENTRIES = [
   ".DS_Store",
 ];
 
+// 用户运行时配置——sync 时绝不允许从源码 cpDir 覆盖。
+// （install 走 cleanDirContents preserve set，sync 不 clean 但要防同名 .json 静默覆盖。）
+const SYNC_SKIP = new Set(["hub-config.json", "lock-phrase.json", "lock.json"]);
+
 // 找包根目录（从 cli.ts 的位置反推）
 const PKG_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -292,7 +296,8 @@ function syncCmd(): void {
   const serverSrc = path.join(packageRoot, "hub-server");
 
   // 2. Copy hub-server .ts/.json/.lock files to runtime
-  cpDir(serverSrc, HUB_DIR, [".ts", ".json", ".lock"]);
+  //    SYNC_SKIP 防止 hub-server/ 下未来若出现同名 .json 静默覆盖用户运行时配置（hub-config.json 等）。
+  cpDir(serverSrc, HUB_DIR, [".ts", ".json", ".lock"], SYNC_SKIP);
   cleanDirContents(CHANNELS_RUNTIME);
   cpDir(path.join(serverSrc, "channels"), CHANNELS_RUNTIME, [".ts"]);
 
@@ -306,24 +311,20 @@ function syncCmd(): void {
   log("✓ hub-server runtime synced（channels/ 已更新）");
 
   // 3. Restart hub via launchctl
+  //    复用 installCmd 的 bootout + bootstrap 模式（kickstart -k -p 不是合法 launchctl 语法；
+  //    bootstrap 第一参数是 domain 不是完整 label）。
   if (os.platform() === "darwin") {
     const uid = os.userInfo().uid;
-    const label = `gui/${uid}/com.forge-hub`;
+    const domain = `gui/${uid}`;
+    const label = `${domain}/com.forge-hub`;
     try {
-      // kickstart -k: forcibly restart by plist path
-      execFileSync("launchctl", ["kickstart", "-k", "-p", LAUNCHD_PLIST], { stdio: "ignore" });
+      execFileSync("launchctl", ["bootout", label], { stdio: "ignore" });
+    } catch { /* might not be bootstrapped */ }
+    try {
+      execFileSync("launchctl", ["bootstrap", domain, LAUNCHD_PLIST], { stdio: "inherit" });
       log("✓ Hub 已重启");
     } catch {
-      // Fallback: bootout + bootstrap if kickstart by path fails
-      try {
-        execFileSync("launchctl", ["bootout", label], { stdio: "ignore" });
-      } catch { /* might not be bootstrapped */ }
-      try {
-        execFileSync("launchctl", ["bootstrap", label, LAUNCHD_PLIST], { stdio: "ignore" });
-        log("✓ Hub 已重启");
-      } catch {
-        log(`⚠️  无法重启 Hub。手动执行：launchctl bootout ${label} && launchctl bootstrap ${label} ${LAUNCHD_PLIST}`);
-      }
+      log(`⚠️  无法重启 Hub。手动执行：launchctl bootout ${label} && launchctl bootstrap ${domain} ${LAUNCHD_PLIST}`);
     }
   }
 
@@ -484,10 +485,11 @@ async function doctorCmd(): Promise<void> {
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-function cpDir(src: string, dst: string, exts: string[]): void {
+function cpDir(src: string, dst: string, exts: string[], skipNames = new Set<string>()): void {
   if (!fs.existsSync(src)) die(`source 不存在: ${src}`);
   fs.mkdirSync(dst, { recursive: true });
   for (const f of fs.readdirSync(src)) {
+    if (skipNames.has(f)) continue;
     const sp = path.join(src, f);
     const dp = path.join(dst, f);
     const stat = fs.statSync(sp);
