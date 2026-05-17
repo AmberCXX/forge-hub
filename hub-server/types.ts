@@ -50,6 +50,10 @@ export interface HubConfig {
    * - "broadcast"：@消息也广播给所有订阅者，meta 里标 handler
    */
   mention_mode?: "broadcast" | "direct";
+  /** 出站消息的发送者名称。默认 "Forge"。可用 HUB_AGENT_NAME env 覆盖。 */
+  agent_name?: string;
+  /** 启用 FTS5 全文搜索索引（默认 false）。启用后 appendHistory 同步写入 SQLite。 */
+  search_index?: boolean;
 }
 
 // ── 通道插件接口 ────────────────────────────────────────────────────────────
@@ -111,6 +115,12 @@ export interface ChannelPlugin {
    * plugin 可以直接读 + 调自己的 API。返回识别文本；失败返 null（不抛，错误用 hub.logError）。
    */
   asrTranscribe?(audioPath: string): Promise<string | null>;
+
+  /**
+   * 告诉 LLM 该通道支持什么消息格式。
+   * Hub 在入站消息的 meta 中注入，LLM 收到消息时就知道回复的格式约束。
+   */
+  formatHints?: string;
 }
 
 export type ChannelStopReason = "auth" | "config" | "crash" | "network" | "conflict" | "cap_reached";

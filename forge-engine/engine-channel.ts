@@ -211,7 +211,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       template: args.template ?? "[提醒] {time}。{prompt}",
       prompt: args.prompt,
       label: args.label,
-      sender: args.sender ?? "reminder",
+      sender: args.sender || process.env.HUB_AGENT_NAME || "reminder",
       source: "ai" as const,
       ...(oneShot ? { one_shot: true } : {}),
       ...(args.weekdays ? { weekdays: args.weekdays } : {}),

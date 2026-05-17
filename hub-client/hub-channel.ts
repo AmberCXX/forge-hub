@@ -413,14 +413,14 @@ async function handleMessage(msg: Record<string, unknown>): Promise<void> {
     case "system":
     case "message":
     case "instance_message": {
-      await safeNotify({
-        content: msg.content as string,
-        meta: {
-          sender: msg.from as string,
-          sender_id: msg.fromId as string,
-          hub_channel: msg.channel as string,
-        },
-      });
+      const raw = msg.raw as Record<string, unknown> | undefined;
+      const meta: Record<string, string> = {
+        sender: msg.from as string,
+        sender_id: msg.fromId as string,
+        hub_channel: msg.channel as string,
+      };
+      if (raw?.format_hints) meta.format_hints = raw.format_hints as string;
+      await safeNotify({ content: msg.content as string, meta });
       break;
     }
 

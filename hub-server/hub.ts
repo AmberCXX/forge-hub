@@ -453,6 +453,7 @@ function onMessageImpl(msg: InboundMessage): InboundHandleResult {
       targeted: result.targeted,
     };
   }
+  const hints = channelPluginsMeta.get(msg.channel)?.formatHints;
   pushToInstances(filtered, {
     type: "message",
     channel: msg.channel,
@@ -460,7 +461,7 @@ function onMessageImpl(msg: InboundMessage): InboundHandleResult {
     fromId: msg.fromId,
     content: result.content,
     targeted: result.targeted,
-    raw: msg.raw,
+    raw: { ...msg.raw, ...(hints ? { format_hints: hints } : {}) },
   });
   const targetInfo = result.targeted ? ` → ${filtered.join(",")}` : "";
   log(`← [${msg.channel}] ${msg.from}${targetInfo}: ${result.content.slice(0, 60)}${result.content.length > 60 ? "..." : ""}`);
@@ -483,6 +484,7 @@ import { startServer } from "./endpoints.js";
 import { setCurrentConfig, getCurrentConfig, setOnMessage } from "./hub-state.js";
 import { startChannelWatchdog } from "./channel-watchdog.js";
 import { loadAllowlist, readAllowlist } from "./state.js";
+import { initSearch, closeSearch } from "./search.js";
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
@@ -501,6 +503,7 @@ async function main() {
 
   const config = loadConfig();
   setCurrentConfig(config);
+  initSearch(config.search_index === true);
 
   if (!config.approval_channels?.length) {
     logError("⚠ approval_channels 未配置。远程审批请求会被 auto-deny。运行 fh hub setup 或编辑 ~/.forge-hub/hub-config.json 添加。");
@@ -648,6 +651,7 @@ async function main() {
     log("────────────────────────────────────────");
     await stopAllChannels();
     securityAggregator.flushAndStop();
+    closeSearch();
     removePid();
     await drainQueuedWrites();
     process.exit(0);

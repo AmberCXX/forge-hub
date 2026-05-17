@@ -179,6 +179,7 @@ function buildRegistrySnapshot(): LoadResult {
       name: plugin.name,
       displayName: plugin.displayName ?? plugin.name,
       aliases: plugin.aliases ?? [],
+      formatHints: plugin.formatHints,
     });
   }
   return { sendMap, metaMap };

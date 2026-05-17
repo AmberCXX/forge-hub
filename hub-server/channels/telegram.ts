@@ -361,6 +361,7 @@ const plugin: ChannelPlugin = {
   displayName: "Telegram",
   aliases: ["tg"],
   capabilities: ["text", "file", "image", "voice"],
+  formatHints: "支持 Markdown（MarkdownV2）。支持代码块、加粗、斜体、链接。单条消息上限 4096 字符。语音以原生语音条发送。",
   // Telegram chat_id 是纯数字（user / group 都是）。5+ 位避开单位数 typo
   isNativeId(to) { return /^-?\d{5,}$/.test(to); },
 

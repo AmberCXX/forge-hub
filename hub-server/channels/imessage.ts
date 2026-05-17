@@ -320,6 +320,7 @@ const plugin: ChannelPlugin = {
   displayName: "iMessage",
   aliases: ["im"],
   capabilities: ["text", "file", "image"],
+  formatHints: "纯文本。不支持任何格式标记。不支持语音发送。",
   // iMessage chat_guid contains ";-;", otherwise it's phone/email (native too
   // but handled as nickname fallback returns the raw string)
   isNativeId(to) { return to.includes(";-;") || /^\+\d{5,}$/.test(to) || /@/.test(to); },

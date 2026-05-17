@@ -14,6 +14,7 @@ import { handleSend, handleSendFile, handleSendVoice } from "./routes/send.js";
 import { handlePermissionRequest, handleDeletePending, handleDashboardApprove, handleDashboardDeny, handleDashboardDismiss } from "./routes/approval.js";
 import { handleInstances, handleChannels, handleSetTag, handleSetDescription, handleSetChannels, handleSetSummary } from "./routes/instances.js";
 import { handleHomelandSend, handleHomelandStream, handleHomelandPresence } from "./routes/homeland.js";
+import { handleSearch } from "./routes/search.js";
 import {
   hasDashboardSession, shouldRejectUntrustedBrowserOrigin, trustedDashboardOrigins, trustedDashboardCorsHeaders,
   isDashboardStaticRequest, serveDashboardStaticOrSpa,
@@ -145,6 +146,9 @@ export function startServer(config: HubConfig): void {
 
         // History
         if (req.method === "GET" && routePath === "/history") return await handleHistory(url);
+
+        // Search
+        if (req.method === "GET" && routePath === "/search") return handleSearch(req);
 
         // Homeland
         if (req.method === "POST" && routePath === "/homeland/send") return await handleHomelandSend(req);

@@ -10,8 +10,10 @@
 
 import fs from "node:fs";
 import { HUB_DIR, logError, recordOutbound } from "./config.js";
-import { getInstances } from "./instance-manager.js";
+import { getChannelInstanceCount, getInstances } from "./instance-manager.js";
+import { getCurrentConfig } from "./hub-state.js";
 import { enqueueAppend } from "./write-queue.js";
+import { indexMessage } from "./search.js";
 
 export interface HistoryEntry {
   ts: string;
@@ -30,6 +32,7 @@ export function appendHistory(channel: string, direction: "in" | "out", from: st
     fileMode: 0o600,
     onError: (err) => { logError(`历史写入失败 (${channel}): ${String(err)}`); },
   });
+  indexMessage(channel, direction, from, text);
 }
 
 export async function readRecentHistory(channel: string, limit: number, sinceTs?: string): Promise<HistoryEntry[]> {
@@ -92,18 +95,20 @@ export async function readRecentHistoryFile(
 }
 
 /**
- * 出站消息的 from 字段——多实例场景下 disambiguate，单实例直接 "Forge"。
- * Users can override via HUB_AGENT_NAME env or config (TODO).
+ * 出站消息的 from 字段。
+ * Resolution: HUB_AGENT_NAME env > hub-config.json agent_name > "Forge"
+ * 多实例在线时追加 instance label 做 disambiguate。
  */
 export function getOutboundFrom(instanceId: string | undefined): string {
-  const DEFAULT_NAME = "Forge";
-  if (!instanceId) return DEFAULT_NAME;
+  const rawName = process.env.HUB_AGENT_NAME || getCurrentConfig().agent_name || "Forge";
+  const baseName = rawName.replace(/[\n\r\x00-\x1f]/g, "").trim().slice(0, 50) || "Forge";
+  if (!instanceId) return baseName;
   const instances = getInstances();
   const inst = instances.get(instanceId);
-  if (!inst) return DEFAULT_NAME;
-  if (instances.size <= 1) return DEFAULT_NAME;
-  if (inst.description && inst.tag) return `${DEFAULT_NAME} (${inst.description}@${inst.tag})`;
-  if (inst.description) return `${DEFAULT_NAME} (${inst.description})`;
-  if (inst.tag) return `${DEFAULT_NAME} (@${inst.tag})`;
-  return DEFAULT_NAME;
+  if (!inst) return baseName;
+  if (getChannelInstanceCount() <= 1) return baseName;
+  if (inst.description && inst.tag) return `${baseName} (${inst.description}@${inst.tag})`;
+  if (inst.description) return `${baseName} (${inst.description})`;
+  if (inst.tag) return `${baseName} (@${inst.tag})`;
+  return baseName;
 }

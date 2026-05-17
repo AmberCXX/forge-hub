@@ -105,7 +105,7 @@ function resolve(raw: RawScheduleEntry, origin: string): ResolvedEntry {
     second: raw.second ?? 0,
     template: raw.template,
     handler: raw.handler,
-    sender: raw.sender ?? "engine",
+    sender: raw.sender || process.env.HUB_AGENT_NAME || "engine",
     prompt: raw.prompt,
     label: raw.label,
     weekdays: raw.weekdays,
@@ -317,7 +317,7 @@ function scheduleOrigin(origin: string, entries: ResolvedEntry[], server: Server
         method: "notifications/claude/channel",
         params: {
           content: `[错过的任务] 以下今日任务在启动前已错过：\n${list}\n\n如需补跑请告诉我。`,
-          meta: { sender: "engine", sender_id: getPrimarySenderId(currentConfig.contacts) },
+          meta: { sender: process.env.HUB_AGENT_NAME || "engine", sender_id: getPrimarySenderId(currentConfig.contacts) },
         },
       }).catch(err => logError(`错过任务通知发送失败: ${String(err)}`));
     }, 3000);

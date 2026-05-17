@@ -22,6 +22,7 @@ export interface ChannelMetaEntry {
   name: string;
   displayName: string;
   aliases: string[];
+  formatHints?: string;
 }
 
 export const channelPlugins = new Map<string, ChannelSendEntry>();

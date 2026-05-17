@@ -340,6 +340,7 @@ const plugin: ChannelPlugin = {
   displayName: "飞书",
   aliases: ["fs"],
   capabilities: ["text", "file", "image", "voice"],
+  formatHints: "纯文本。飞书支持富文本卡片但当前通道走文本消息。语音以音频文件发送。",
   // 飞书 user open_id: "ou_...", chat_id: "oc_..."
   isNativeId(to) { return to.startsWith("ou_") || to.startsWith("oc_"); },
 

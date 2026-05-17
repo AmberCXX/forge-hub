@@ -55,6 +55,7 @@ const homeland: ChannelPlugin = {
   displayName: "Homeland",
   aliases: ["home", "local"],
   capabilities: ["text", "file", "voice"] as ChannelCapability[],
+  formatHints: "本地 Dashboard。支持 Markdown 渲染、代码块、链接。无长度限制。",
 
   async start(hubAPI: HubAPI): Promise<void> {
     hub = hubAPI;

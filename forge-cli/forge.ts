@@ -427,6 +427,26 @@ async function hubReplay(args: string[]) {
   }
 }
 
+async function hubSearch(args: string[]) {
+  if (args.length < 1) die("用法: fh hub search <关键字> [--channel=wx] [--limit=20] [--since=2026-05-01]");
+  const query = args.filter(a => !a.startsWith("--")).join(" ");
+  if (!query) die("缺少搜索关键字");
+  const qs = new URLSearchParams({ q: query });
+  for (const arg of args) {
+    if (arg.startsWith("--channel=")) qs.set("channel", arg.slice(10));
+    if (arg.startsWith("--limit=")) qs.set("limit", arg.slice(8));
+    if (arg.startsWith("--since=")) qs.set("since", arg.slice(8));
+  }
+  const data = await hubGet(`/search?${qs.toString()}`) as { results: { ts: string; channel: string; direction: string; sender: string; content: string }[]; count: number };
+  if (data.count === 0) { console.log("无匹配结果"); return; }
+  console.log(`找到 ${data.count} 条：`);
+  for (const r of data.results) {
+    const time = new Date(r.ts).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const arrow = r.direction === "in" ? "←" : "→";
+    console.log(`${time} [${r.channel}] ${arrow} ${r.sender}: ${r.content.slice(0, 80)}`);
+  }
+}
+
 async function hubPending() {
   const data = await hubGet("/pending") as {
     count: number;
@@ -1352,6 +1372,7 @@ if (domain === "hub") {
     case "ps": await hubPs(); break;
     case "security": hubSecurity(rest); break;
     case "replay": await hubReplay(rest); break;
+    case "search": await hubSearch(rest); break;
     case "send": await hubSend(rest); break;
     case "name": await hubName(rest); break;
     case "summary": await hubSummary(rest); break;

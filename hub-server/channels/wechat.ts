@@ -303,6 +303,7 @@ const plugin: ChannelPlugin = {
   displayName: "微信",
   aliases: ["wx"],
   capabilities: ["text", "file", "voice", "image"],
+  formatHints: "纯文本。不支持 Markdown（会被自动 strip）。长消息自动分段（3500字符/段）。语音以 mp3 附件发送，非原生语音条。",
   isNativeId(to) { return to.includes("@im.wechat"); },
 
   async start(hubAPI) {

@@ -20,7 +20,7 @@ function buildSendWarning(channel: string): string | undefined {
   if (status === "unhealthy" || status === "degraded") {
     warnings.push(`通道 ${channel} 入站连续 ${health.consecutiveFailures} 次失败${health.lastError ? `（最近: ${health.lastError.slice(0, 60)}）` : ""}——发送仍会尝试，但对方回复可能收不到`);
   }
-  if (health.lastMessageIn) {
+  if (health.lastMessageIn && status !== "healthy") {
     const mins = Math.floor((Date.now() - new Date(health.lastMessageIn).getTime()) / 60000);
     if (mins > 10) {
       warnings.push(`通道 ${channel} 入站已 ${mins} 分钟无消息，轮询可能挂了。如果对方回了你可能看不到`);
