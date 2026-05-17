@@ -241,6 +241,7 @@ export interface InboundMessage {
 
 export type InboundHandleReason =
   | "accepted"
+  | "queued"
   | "lock_triggered"
   | "allowlist_error"
   | "unauthorized_sender"

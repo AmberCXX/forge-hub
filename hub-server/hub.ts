@@ -424,45 +424,31 @@ function onMessageImpl(msg: InboundMessage): InboundHandleResult {
       targeted: result.targeted,
     };
   }
+  const hints = channelPluginsMeta.get(msg.channel)?.formatHints;
+  const payload = {
+    type: "message" as const, channel: msg.channel, from: msg.from, fromId: msg.fromId,
+    content: result.content, targeted: result.targeted,
+    raw: { ...msg.raw, ...(hints ? { format_hints: hints } : {}) },
+  };
+
   if (result.targets.length === 0) {
-    log(`← [${msg.channel}] ${msg.from}: ${msg.content.slice(0, 60)}... (无在线实例)`);
-    return {
-      accepted: false,
-      reason: "no_online_instance",
-      detail: "当前没有在线实例可接手",
-    };
+    enqueue(msg.channel, payload);
+    log(`← [${msg.channel}] ${msg.from}: ${msg.content.slice(0, 60)}... (已入队，等待实例上线)`);
+    return { accepted: true, reason: "queued", detail: "无在线实例，消息已入队" };
   }
   const filtered = filterBySubscription(result.targets, msg.channel, result.targeted);
   if (filtered.length === 0) {
-    log(`← [${msg.channel}] ${msg.from}: ${msg.content.slice(0, 60)}... (无订阅实例)`);
-    return {
-      accepted: false,
-      reason: "no_subscribed_instance",
-      detail: `${msg.channel} 当前没有实例订阅`,
-      targeted: result.targeted,
-    };
+    enqueue(msg.channel, payload);
+    log(`← [${msg.channel}] ${msg.from}: ${msg.content.slice(0, 60)}... (已入队，无订阅实例)`);
+    return { accepted: true, reason: "queued", detail: `${msg.channel} 无订阅实例，消息已入队` };
   }
   const actualOnline = filtered.filter((id) => getInstances().has(id));
   if (actualOnline.length === 0 && filtered.length > 0) {
-    logError(`⚠ 路由目标已全部离线（${filtered.join(",")}），消息未推送: ${msg.from}@${msg.channel}`);
-    return {
-      accepted: false,
-      reason: "no_online_instance",
-      detail: `路由目标已全部离线：${filtered.join(",")}`,
-      targets: filtered,
-      targeted: result.targeted,
-    };
+    enqueue(msg.channel, payload);
+    log(`← [${msg.channel}] ${msg.from}: ${msg.content.slice(0, 60)}... (已入队，目标离线)`);
+    return { accepted: true, reason: "queued", targets: filtered, targeted: result.targeted };
   }
-  const hints = channelPluginsMeta.get(msg.channel)?.formatHints;
-  pushToInstances(filtered, {
-    type: "message",
-    channel: msg.channel,
-    from: msg.from,
-    fromId: msg.fromId,
-    content: result.content,
-    targeted: result.targeted,
-    raw: { ...msg.raw, ...(hints ? { format_hints: hints } : {}) },
-  });
+  pushToInstances(filtered, payload);
   const targetInfo = result.targeted ? ` → ${filtered.join(",")}` : "";
   log(`← [${msg.channel}] ${msg.from}${targetInfo}: ${result.content.slice(0, 60)}${result.content.length > 60 ? "..." : ""}`);
   return {
@@ -485,6 +471,7 @@ import { setCurrentConfig, getCurrentConfig, setOnMessage } from "./hub-state.js
 import { startChannelWatchdog } from "./channel-watchdog.js";
 import { loadAllowlist, readAllowlist } from "./state.js";
 import { initSearch, closeSearch } from "./search.js";
+import { initQueue, enqueue, drain, dequeue, closeQueue } from "./message-queue.js";
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
@@ -504,6 +491,7 @@ async function main() {
   const config = loadConfig();
   setCurrentConfig(config);
   initSearch(config.search_index === true);
+  initQueue();
 
   if (!config.approval_channels?.length) {
     logError("⚠ approval_channels 未配置。远程审批请求会被 auto-deny。运行 fh hub setup 或编辑 ~/.forge-hub/hub-config.json 添加。");
@@ -596,8 +584,21 @@ async function main() {
       const instance = getInstances().get(instanceId);
       if (!instance) return;
 
-      // 全局开关：auto_replay_on_ready=false 时不推自动历史，pull-model（instance 用 hub_replay_history 工具自己拉）
-      // default true 保持兼容。想开"纯净测试窗口"就在 hub-config.json 里设 false。
+      // Drain queued messages for this instance's subscribed channels
+      if (instance.isChannel !== false) {
+        const subscribedChannels = instance.channels ?? [...channelPlugins.keys()];
+        const queued = drain(subscribedChannels);
+        if (queued.length > 0) {
+          const delivered: number[] = [];
+          for (const m of queued) {
+            const status = instance.ws.send(JSON.stringify(m.payload));
+            if (status > 0) delivered.push(m.id);
+          }
+          if (delivered.length > 0) dequeue(delivered);
+          log(`📬 已投递 ${delivered.length}/${queued.length} 条排队消息给 ${instanceId}`);
+        }
+      }
+
       const autoReplay = getCurrentConfig().auto_replay_on_ready !== false;
       const replayCount = getCurrentConfig().auto_replay_count ?? 5;
 
@@ -652,6 +653,7 @@ async function main() {
     await stopAllChannels();
     securityAggregator.flushAndStop();
     closeSearch();
+    closeQueue();
     removePid();
     await drainQueuedWrites();
     process.exit(0);
