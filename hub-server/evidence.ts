@@ -228,8 +228,8 @@ function writeFallback(rawJson: string, channel: string, updateId: string): void
     });
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     fs.appendFileSync(fallbackPath, line + "\n", { encoding: "utf-8", mode: 0o600 });
-  } catch {
-    // fallback 的 fallback 只能放弃
+  } catch (err) {
+    logError(`evidence fallback 写入也失败，证据丢失: ${String(err)}`);
   }
 }
 

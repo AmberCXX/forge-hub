@@ -261,16 +261,51 @@ async function fire(entry: ResolvedEntry, server: Server): Promise<void> {
 
 // ── Logging & State ─────────────────────────────────────────────────────────
 
+// ── Trigger Log Rotation ───────────────────────────────────────────────────
+
+const TRIGGER_LOG_MAX_SIZE = 512 * 1024; // 512KB
+const TRIGGER_LOG_KEEP = 2;              // keep .1, .2
+
+function rotateTriggerLogIfNeeded(): void {
+  try {
+    if (!fs.existsSync(ACTION_LOG_FILE)) return;
+    const stat = fs.statSync(ACTION_LOG_FILE);
+    if (stat.size < TRIGGER_LOG_MAX_SIZE) return;
+
+    for (let i = TRIGGER_LOG_KEEP; i >= 1; i--) {
+      const from = i === 1 ? ACTION_LOG_FILE : `${ACTION_LOG_FILE}.${i - 1}`;
+      const to = `${ACTION_LOG_FILE}.${i}`;
+      if (i === TRIGGER_LOG_KEEP) {
+        try { fs.unlinkSync(to); } catch {}
+      }
+      try {
+        fs.renameSync(from, to);
+      } catch (err) {
+        if (!String(err).includes("ENOENT")) throw err;
+      }
+    }
+    log(`📜 触发日志已轮转 (>${TRIGGER_LOG_MAX_SIZE / 1024}KB)`);
+  } catch (err) {
+    logError(`触发日志轮转失败: ${String(err)}`);
+  }
+}
+
 function appendLog(entry: ResolvedEntry, content: string): void {
   const now = new Date();
   const line = `\n## ${dateStr(now)} ${timeStr(now.getHours(), now.getMinutes())} — ${entry.sender}\n- 来源: ${entry.origin}\n- 内容: ${content.slice(0, 100)}${content.length > 100 ? "..." : ""}\n`;
-  try { fs.appendFileSync(ACTION_LOG_FILE, line, "utf-8"); } catch {}
+  try {
+    rotateTriggerLogIfNeeded();
+    fs.appendFileSync(ACTION_LOG_FILE, line, "utf-8");
+  } catch {}
 }
 
 function appendSystemLog(event: string): void {
   const now = new Date();
   const line = `\n## ${dateStr(now)} ${timeStr(now.getHours(), now.getMinutes())} — [系统]\n- ${event}\n`;
-  try { fs.appendFileSync(ACTION_LOG_FILE, line, "utf-8"); } catch {}
+  try {
+    rotateTriggerLogIfNeeded();
+    fs.appendFileSync(ACTION_LOG_FILE, line, "utf-8");
+  } catch {}
 }
 
 function updateState(sender: string): void {
@@ -465,6 +500,18 @@ function scheduleMidnight(server: Server): void {
 }
 
 // ── Start ───────────────────────────────────────────────────────────────────
+
+export function stopScheduler(): void {
+  clearAll();
+  if (midnightTimer) {
+    clearTimeout(midnightTimer);
+    midnightTimer = null;
+  }
+  if (reloadDebounce) {
+    clearTimeout(reloadDebounce);
+    reloadDebounce = null;
+  }
+}
 
 export async function startScheduler(server: Server): Promise<void> {
   ensureDirs();

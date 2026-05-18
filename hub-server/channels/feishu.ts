@@ -18,6 +18,7 @@ import { execFileText } from "../process-utils.js";
 import { assertRealPathInsideDir, sanitizeMediaFileName } from "../media-path.js";
 import { assertFileWithinMediaSizeLimit } from "../media-policy.js";
 import { recordUnauthorizedEvidence } from "../evidence.js";
+import { isNetworkError, SEND_RETRY_DELAY_MS } from "../send-retry.js";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -429,6 +430,22 @@ const plugin: ChannelPlugin = {
       return { success: false, error: `不支持的类型: ${type}` };
     } catch (err) {
       const redacted = redactSensitive(String(err));
+      if (type === "text" && isNetworkError(String(err))) {
+        hub.logError(`发送失败（网络），${SEND_RETRY_DELAY_MS}ms 后重试: ${redacted}`);
+        await new Promise(r => setTimeout(r, SEND_RETRY_DELAY_MS));
+        try {
+          const idFlag = to.startsWith("oc_") ? "--chat-id" : "--user-id";
+          await execFileText(LARK_CLI, ["im", "+messages-send", idFlag, to, "--text", content, "--as", "bot"], { timeout: 15000 });
+          return { success: true };
+        } catch (retryErr) {
+          const r2 = redactSensitive(String(retryErr));
+          hub.logError(`重试也失败: ${r2}`);
+          return { success: false, error: r2 };
+        }
+      }
+      if (/token|auth|permission|403|401/i.test(String(err))) {
+        plugin.stoppedReason = "auth";
+      }
       hub.logError(`发送失败: ${redacted}`);
       return { success: false, error: redacted };
     }

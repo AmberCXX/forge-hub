@@ -77,6 +77,11 @@ function loadConfig(): HubConfig {
       if (typeof merged.port !== "number" || !Number.isInteger(merged.port) || merged.port <= 0 || merged.port > 65535) {
         merged.port = DEFAULT_PORT;
       }
+      if (typeof merged.show_instance_tag !== "boolean") merged.show_instance_tag = false;
+      if (merged.approval_channels && !Array.isArray(merged.approval_channels)) merged.approval_channels = undefined;
+      if (merged.auto_replay_count !== undefined && (typeof merged.auto_replay_count !== "number" || merged.auto_replay_count < 0)) merged.auto_replay_count = 5;
+      if (merged.agent_name !== undefined && typeof merged.agent_name !== "string") merged.agent_name = undefined;
+      if (merged.search_index !== undefined && typeof merged.search_index !== "boolean") merged.search_index = undefined;
       return merged;
     }
   } catch (err) {
@@ -448,7 +453,13 @@ function onMessageImpl(msg: InboundMessage): InboundHandleResult {
     log(`← [${msg.channel}] ${msg.from}: ${msg.content.slice(0, 60)}... (已入队，目标离线)`);
     return { accepted: true, reason: "queued", targets: filtered, targeted: result.targeted };
   }
-  pushToInstances(filtered, payload);
+  const pushFailed = pushToInstances(filtered, payload);
+  if (pushFailed.length > 0 && pushFailed.length === filtered.length) {
+    enqueue(msg.channel, payload);
+    log(`⚠ 全部 ${pushFailed.length} 个实例推送失败（buffer full），消息已入队`);
+  } else if (pushFailed.length > 0) {
+    log(`⚠ ${pushFailed.length}/${filtered.length} 个实例推送失败，${filtered.length - pushFailed.length} 个已送达`);
+  }
   const targetInfo = result.targeted ? ` → ${filtered.join(",")}` : "";
   log(`← [${msg.channel}] ${msg.from}${targetInfo}: ${result.content.slice(0, 60)}${result.content.length > 60 ? "..." : ""}`);
   return {

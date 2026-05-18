@@ -100,7 +100,7 @@ async function expectForbiddenFromEvilOrigin(hub: TestHub, pathname: string, ini
   if (hub.token) headers.set("Authorization", `Bearer ${hub.token}`);
   const res = await fetch(`${hub.url}${pathname}`, { ...init, headers });
   expect(res.status).toBe(403);
-  expect(await res.json()).toEqual({ error: "forbidden_origin" });
+  expect(await res.json()).toEqual({ success: false, error: "forbidden_origin" });
 }
 
 describe("browser Origin guard", () => {

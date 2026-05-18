@@ -203,7 +203,7 @@ export function handleWsOpen(ws: ServerWebSocket<WsData>): void {
   log(`🔌 实例连接: ${instanceId}${descInfo}${tagInfo} (在线 ${instances.size})`);
 
   // Send connection confirmation
-  ws.send(JSON.stringify({ type: "connected" }));
+  ws.send(JSON.stringify({ type: "connected", protocol: 1 }));
 }
 
 export function handleWsMessage(ws: ServerWebSocket<WsData>, raw: string | Buffer): void {
@@ -252,13 +252,16 @@ export function handleWsClose(ws: ServerWebSocket<WsData>): void {
 
 // ── Push to Instances ───────────────────────────────────────────────────────
 
-export function pushToInstances(targetIds: string[], event: HubEvent): void {
+export function pushToInstances(targetIds: string[], event: HubEvent): string[] {
+  const failed: string[] = [];
   for (const id of targetIds) {
     const instance = instances.get(id);
     if (instance) {
-      instance.send(event);
+      const status = instance.send(event);
+      if (status <= 0) failed.push(id);
     }
   }
+  return failed;
 }
 
 // ── Update Summary ──────────────────────────────────────────────────────────

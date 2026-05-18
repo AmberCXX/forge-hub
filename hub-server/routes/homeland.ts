@@ -33,14 +33,14 @@ function mapIngressFailure(result: InboundHandleResult): { status: number; error
 export async function handleHomelandSend(req: Request): Promise<Response> {
   const body = await req.json() as { content: string; instance?: string };
   if (!body.content?.trim()) {
-    return Response.json({ error: "content is required" }, { status: 400 });
+    return Response.json({ success: false, error: "content is required" }, { status: 400 });
   }
   if (body.instance && !getInstances().has(body.instance)) {
-    return Response.json({ error: `selected instance ${body.instance} is offline` }, { status: 409 });
+    return Response.json({ success: false, error: `selected instance ${body.instance} is offline` }, { status: 409 });
   }
   const plugin = channelPlugins.get("homeland");
   if (!plugin) {
-    return Response.json({ error: "homeland channel not loaded" }, { status: 503 });
+    return Response.json({ success: false, error: "homeland channel not loaded" }, { status: 503 });
   }
   const { onMessage } = await import("../hub-state.js");
   const result = await onMessage({

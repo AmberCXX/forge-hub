@@ -301,7 +301,7 @@ export type WsClientMessage =
 
 /** Hub → 实例的实时事件 */
 export interface HubEvent {
-  type: "message" | "instance_message" | "system" | "permission_response";
+  type: "message" | "instance_message" | "system" | "permission_response" | "connected" | "history" | "context";
   channel: string;
   from: string;
   fromId: string;

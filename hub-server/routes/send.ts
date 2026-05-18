@@ -36,7 +36,7 @@ async function handleSendRequest(
   onFinally?: () => void,
 ): Promise<Response> {
   const plugin = channelPlugins.get(body.channel);
-  if (!plugin) return Response.json({ error: `unknown channel: ${body.channel}` }, { status: 404 });
+  if (!plugin) return Response.json({ success: false, error: `unknown channel: ${body.channel}` }, { status: 404 });
 
   const resolved = resolveRecipient(body.channel, body.to);
   if (!resolved.ok) return Response.json({ success: false, error: resolved.error });

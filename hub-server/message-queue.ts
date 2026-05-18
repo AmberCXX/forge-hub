@@ -38,7 +38,7 @@ export function initQueue(): void {
     const count = (db.prepare("SELECT COUNT(*) as n FROM pending").get() as { n: number }).n;
     if (count > 0) log(`📬 消息队列: ${count} 条待投递`);
     cleanupTimer = setInterval(() => {
-      try { db?.run("DELETE FROM pending WHERE created_at < datetime('now', '-24 hours')"); } catch {}
+      try { db?.run("DELETE FROM pending WHERE created_at < datetime('now', '-24 hours')"); } catch (err) { logError(`队列过期清理失败: ${String(err)}`); }
     }, 3600_000);
   } catch (err) {
     logError(`消息队列初始化失败: ${String(err)}`);

@@ -54,7 +54,7 @@ export function startServer(config: HubConfig): void {
       const hasDashboardCookie = hasDashboardSession(req, apiToken);
 
       if (shouldRejectUntrustedBrowserOrigin(req, url, routePath, isWsUpgrade)) {
-        return Response.json({ error: "forbidden_origin" }, { status: 403 });
+        return Response.json({ success: false, error: "forbidden_origin" }, { status: 403 });
       }
 
       if (apiToken && !isPublicHealthCheck && !isDashboardStatic && !isDashboardAuthReq && !isDashboardLogoutReq) {
@@ -67,7 +67,7 @@ export function startServer(config: HubConfig): void {
         }
         const hasBearerToken = providedToken === apiToken;
         if (!hasBearerToken && !hasDashboardCookie) {
-          return Response.json({ error: "unauthorized" }, { status: 401 });
+          return Response.json({ success: false, error: "unauthorized" }, { status: 401 });
         }
         if (!hasBearerToken && hasDashboardCookie) {
           const requiresCheck = isWsUpgrade ||
@@ -76,7 +76,7 @@ export function startServer(config: HubConfig): void {
           const origin = req.headers.get("Origin");
           if (requiresCheck && origin) {
             if (!trustedDashboardOrigins(url).has(origin)) {
-              return Response.json({ error: "forbidden_origin" }, { status: 403 });
+              return Response.json({ success: false, error: "forbidden_origin" }, { status: 403 });
             }
           }
         }
@@ -163,7 +163,7 @@ export function startServer(config: HubConfig): void {
 
         return new Response("not found", { status: 404 });
       } catch (err) {
-        return Response.json({ error: redactSensitive(String(err)) }, { status: 500 });
+        return Response.json({ success: false, error: redactSensitive(String(err)) }, { status: 500 });
       }
     },
   });

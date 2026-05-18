@@ -1203,6 +1203,7 @@ if (!domain) {
   fh hub owner <ch> [id|nick|--clear]  查看或设置审批 owner
   fh hub allowlist [ch]          查看授权列表
   fh hub ps                      查看 hub-channel 进程状态
+  fh hub search <关键字> [--channel=wx] [--limit=20]  搜索历史消息（需 search_index: true）
   fh hub security [events|evidence]  查看安全事件和 evidence 记录
   fh hub preset list             查看通道预设
   fh hub preset add <n> <ch:N>   添加预设（如 wx:200 tg:50）

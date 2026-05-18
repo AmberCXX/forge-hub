@@ -84,7 +84,7 @@ export function handleOverview(): Response {
 export async function handleHistory(url: URL): Promise<Response> {
   const channel = url.searchParams.get("channel") ?? "wechat";
   if (!channelPlugins.has(channel)) {
-    return Response.json({ error: `unknown channel: ${channel}` }, { status: 400 });
+    return Response.json({ success: false, error: `unknown channel: ${channel}` }, { status: 400 });
   }
   let limit = parseInt(url.searchParams.get("limit") ?? "200", 10);
   if (!Number.isFinite(limit) || limit <= 0 || limit > 1000) limit = 200;

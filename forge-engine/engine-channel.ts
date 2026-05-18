@@ -25,7 +25,7 @@ import {
   log,
   logError,
 } from "./config.js";
-import { startScheduler } from "./scheduler.js";
+import { startScheduler, stopScheduler } from "./scheduler.js";
 import type { RawScheduleEntry } from "./types.js";
 import { resolveTaskTiming } from "./task-timing.js";
 import type { EngineAddTaskArgs } from "./task-timing.js";
@@ -282,6 +282,16 @@ async function main() {
   log("MCP 连接就绪");
 
   await startScheduler(server);
+
+  // ── Graceful Shutdown ────────────────────────────────────────────────────
+  function shutdown(signal: string) {
+    log(`收到 ${signal}，正常关闭`);
+    stopScheduler();
+    log("engine stopped");
+    process.exit(0);
+  }
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 
   log("engine started");
 }

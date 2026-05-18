@@ -172,20 +172,20 @@ export function handleDeletePending(routePath: string): Response {
 export function handleDashboardApprove(routePath: string): Response {
   const id = decodeURIComponent(routePath.slice("/pending/".length, -"/approve".length));
   const result = resolveApprovalFromDashboard(id, "allow");
-  if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
+  if (!result.ok) return Response.json({ success: false, error: result.error }, { status: result.status });
   return Response.json({ success: true, action: result.action });
 }
 
 export function handleDashboardDeny(routePath: string): Response {
   const id = decodeURIComponent(routePath.slice("/pending/".length, -"/deny".length));
   const result = resolveApprovalFromDashboard(id, "deny");
-  if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
+  if (!result.ok) return Response.json({ success: false, error: result.error }, { status: result.status });
   return Response.json({ success: true, action: result.action });
 }
 
 export function handleDashboardDismiss(routePath: string): Response {
   const id = decodeURIComponent(routePath.slice("/pending/".length, -"/dismiss".length));
   const result = dismissApprovalFromDashboard(id);
-  if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
+  if (!result.ok) return Response.json({ success: false, error: result.error }, { status: result.status });
   return Response.json({ success: true, action: result.action });
 }
