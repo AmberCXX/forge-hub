@@ -45,6 +45,7 @@ export function enqueueAppend(filePath: string, content: string, options: QueueA
 }
 
 export async function drainQueuedWrites(): Promise<void> {
-  if (inFlight.size === 0) return;
-  await Promise.allSettled([...inFlight]);
+  while (inFlight.size > 0) {
+    await Promise.allSettled([...inFlight]);
+  }
 }
