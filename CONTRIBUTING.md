@@ -7,14 +7,12 @@
 ```bash
 git clone https://github.com/LinekForge/forge-hub.git
 cd forge-hub
-(cd hub-server && bun install)
-(cd hub-client && bun install)
-(cd forge-engine && bun install)
-(cd hub-dashboard && bun install)
-bun cli.ts doctor               # 自检（看缺什么依赖 / 凭证 / plist）
+bun run setup                   # 一键安装所有子包依赖
 bun hub-test-harness/harness.ts # 直接跑 8 场景 harness
 fh hub self-test                # 走对外 CLI 包装再跑一遍
 ```
+
+> **注意**：`bun cli.ts doctor` 检查的是 `~/.forge-hub/` 下的**部署产物**（plist、运行时文件、MCP 注册），不是源码目录。本地开发只需各子包 install + tsc + test。首次 clone 后跑 doctor 会满屏红叉——这是正常的，不代表开发环境有问题。
 
 ## 维护入口
 

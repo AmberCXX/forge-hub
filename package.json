@@ -8,6 +8,7 @@
     "bun": ">=1.0.0"
   },
   "scripts": {
+    "setup": "cd hub-server && bun install && cd ../hub-client && bun install && cd ../forge-engine && bun install && cd ../hub-dashboard && bun install",
     "self-test": "bun hub-test-harness/harness.ts",
     "doctor": "bun cli.ts doctor"
   },
