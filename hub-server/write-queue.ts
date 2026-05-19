@@ -33,7 +33,7 @@ export function enqueueAppend(filePath: string, content: string, options: QueueA
     .catch((err) => {
       try {
         options.onError?.(err, filePath);
-      } catch {}
+      } catch (cbErr) { console.error(`[hub] write-queue onError 回调异常: ${String(cbErr)}`); }
     });
 
   fileQueues.set(filePath, next);

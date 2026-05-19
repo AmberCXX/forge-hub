@@ -24,13 +24,41 @@ engine.d/*.json (schedule 文件)
 | 文件 | 职责 |
 |------|------|
 | `engine-channel.ts` | MCP server 入口 + `engine_add_task` 工具 |
-| `scheduler.ts` | 核心调度——expandRandom / fire / 午夜重算 / 热加载 |
+| `scheduler.ts` | 核心调度——expandRandom / fire / 午夜重算 / 热加载 / PID lock / `stopScheduler` |
 | `config-loader.ts` | 配置加载 + fs.watch 热加载 |
 | `handler-loader.ts` | 可插拔 handler（`handlers/` 目录下的自定义逻辑） |
 | `template.ts` | 模板变量渲染（`{time}` `{weekday}` `{contacts}` 等） |
 | `state.ts` | 持久化状态（任务 + pause） |
 | `types.ts` | TypeScript 类型定义 |
 | `config.ts` | 路径常量 + 日志 |
+
+## PID Lock / Passive Mode
+
+同一台机器上可能有多个 Claude Code session 各自 spawn 自己的 engine MCP server 进程。为避免重复调度，engine 用 PID 文件（`engine-data/engine.pid`）做排他锁：
+
+- **第一个启动的实例**拿到锁，成为 **active**——正常排程、fire 定时任务。
+- **后续实例**检测到锁已被一个活着的进程持有，自动进入 **passive mode**——MCP 工具（`engine_add_task`）照常可用，但不启动任何定时器，不重复触发任务。
+- 如果持锁进程已退出（stale PID），新实例接管锁并成为 active。
+
+Passive mode 对 agent 透明：工具调用不受影响，只是定时排程由唯一的 active 实例负责。
+
+## Graceful Shutdown
+
+engine-channel.ts 注册了 `SIGTERM` 和 `SIGINT` 信号处理：
+
+1. 调用 `stopScheduler()` — 清除所有定时器（task timers + 午夜重排 + 热加载 debounce）
+2. 释放 PID lock（只删自己持有的 `engine.pid`）
+3. `process.exit(0)`
+
+这保证 Claude Code 关窗口（launchd 或 MCP 父进程发 SIGTERM）时不会留下残余定时器或 stale PID 文件。
+
+## Trigger Log Rotation
+
+`engine-trigger-log.md`（记录每次任务触发的日志）支持自动轮转：
+
+- 每次写入前检查文件大小，超过 **512 KB** 自动轮转。
+- 保留 **2 个**轮转文件（`engine-trigger-log.md.1`、`engine-trigger-log.md.2`），更旧的自动删除。
+- 轮转采用重命名链：当前 → `.1` → `.2`，不丢数据。
 
 ## 快速开始
 
@@ -142,6 +170,13 @@ fh engine log "今天 14:00 已人工处理"
 | `engine_add_task` | Claude 在 session 里动态添加定时任务（如"一小时后提醒我做 X"） |
 
 > `engine_add_task` 只有在你按上面的步骤把 engine MCP server 单独注册进 Claude Code 之后才可用。
+
+## Public API
+
+| 导出 | 来源 | 说明 |
+|------|------|------|
+| `startScheduler(server)` | `scheduler.ts` | 启动调度（获取 PID lock、加载配置、排程、启动热加载） |
+| `stopScheduler()` | `scheduler.ts` | 清除所有定时器（task timers + 午夜重排 + 热加载 debounce）、释放 PID lock。shutdown handler 内部调用 |
 
 ## Handler 插件
 

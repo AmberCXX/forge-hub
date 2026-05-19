@@ -128,7 +128,7 @@ export function startServer(config: HubConfig): void {
             const who = body.instance ?? "unknown";
             const what = body.text?.slice(0, 60) ?? body.path?.split("/").pop() ?? "";
             log(`🔒 出站拦截 [${body.channel ?? "?"}] ${who}: ${what} [已锁定]`);
-          } catch {}
+          } catch { /* body parse best-effort for logging */ }
           return Response.json({ success: false, error: "Hub 已锁定" });
         }
 
