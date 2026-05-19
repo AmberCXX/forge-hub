@@ -399,6 +399,8 @@ const plugin: ChannelPlugin = {
   async stop() {
     shouldStop = true;
     readyReported = false;
+    for (const [, { timer }] of typingState) clearTimeout(timer);
+    typingState.clear();
     hub.log("停止微信轮询...");
     // Wait for polling to finish current iteration
     let waitCount = 0;

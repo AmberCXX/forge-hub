@@ -602,8 +602,12 @@ async function main() {
         } else if (queued.length > 0) {
           const delivered: number[] = [];
           for (const m of queued) {
-            const status = instance.ws.send(JSON.stringify(m.payload));
-            if (status > 0) delivered.push(m.id);
+            try {
+              const status = instance.ws.send(JSON.stringify(m.payload));
+              if (status > 0) delivered.push(m.id);
+            } catch (err) {
+              logError(`drain 投递失败 (${instanceId}, msg ${m.id}): ${String(err)}`);
+            }
           }
           if (delivered.length > 0) dequeue(delivered);
           log(`📬 已投递 ${delivered.length}/${queued.length} 条排队消息给 ${instanceId}`);
