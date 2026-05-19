@@ -567,7 +567,7 @@ async function main() {
 
   // Restore pending permissions from disk（Hub 重启/崩溃恢复）+ 启动 TTL sweep
   loadPendingFromDisk();
-  startPendingTtlSweep();
+  const pendingSweepTimer = startPendingTtlSweep();
 
   // Start HTTP server
   startServer(config);
@@ -587,7 +587,7 @@ async function main() {
   }
 
   // Channel watchdog: 每 2 分钟检查 unhealthy 通道并自动 restart
-  startChannelWatchdog(onMessage, recordSecurityEvent);
+  const watchdogTimer = startChannelWatchdog(onMessage, recordSecurityEvent);
 
   // Register onReady callback: push history + context when client sends "ready"
   setOnReadyCallback((instanceId, historyConfig) => {
@@ -662,6 +662,8 @@ async function main() {
     log(`运行 ${uptime}s · 收 ${totalIn} 条 · 发 ${totalOut} 条`);
     log("────────────────────────────────────────");
     if (configReloadDebounce) clearTimeout(configReloadDebounce);
+    clearInterval(watchdogTimer);
+    clearInterval(pendingSweepTimer);
     await stopAllChannels();
     securityAggregator.flushAndStop();
     closeSearch();

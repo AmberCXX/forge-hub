@@ -150,8 +150,8 @@ export function loadPendingFromDisk(): void {
 const REMINDER_AFTER_MS = 30 * 60 * 1000;
 
 /** 启动定时 sweep，每 60s 扫一次：30 分钟提醒 + 240 分钟超时清理 */
-export function startPendingTtlSweep(): void {
-  setInterval(() => {
+export function startPendingTtlSweep(): ReturnType<typeof setInterval> {
+  return setInterval(() => {
     try {
       const now = Date.now();
       let changed = false;

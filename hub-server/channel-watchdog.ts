@@ -24,8 +24,8 @@ const WATCHDOG_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 export function startChannelWatchdog(
   onMessage: (msg: InboundMessage) => void,
   onSecurityEvent: (params: HubSecurityEventParams) => void = () => {},
-): void {
-  setInterval(async () => {
+): ReturnType<typeof setInterval> {
+  return setInterval(async () => {
     for (const [name] of channelPlugins) {
       const plugin = getPlugin(name);
       if (!plugin) continue;
