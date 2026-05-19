@@ -137,8 +137,8 @@ async function extractContent(msg: WeixinMessage, hubApi: HubAPI, downloadMedia:
     if (item.type === 2 || item.type === 3 || item.type === 4 || item.type === 5) {
       const media = await downloadMedia(item, MEDIA_DIR);
       if (media) {
-        const labels: Record<string, string> = { image: "图片", voice: "语音文件", file: "文件", video: "视频" };
-        parts.push(`[${labels[media.type]}] 已保存到 ${media.filePath}`);
+        const labels: Record<string, string> = { image: "图片", voice: "语音", file: "文件", video: "视频" };
+        parts.push(`[${labels[media.type]}] ${media.filePath}`);
         hubApi.log(`📎 ${labels[media.type]}: ${media.filePath}`);
       } else {
         const typeNames: Record<number, string> = { 2: "图片", 3: "语音", 4: "文件", 5: "视频" };

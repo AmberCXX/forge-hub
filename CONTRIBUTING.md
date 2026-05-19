@@ -40,11 +40,11 @@ fh hub self-test                # 走对外 CLI 包装再跑一遍
 |----------|----------|
 | `hub-server/` 路由、审批、allowlist、lock、history | `(cd hub-server && bun install && bunx tsc --noEmit && bun test)` + `bun hub-test-harness/harness.ts` |
 | 远程审批主流程 / 第二道防线 / harness 相关 | 上一行 + `fh hub self-test` |
-| `hub-client/` | `(cd hub-client && bun install && bunx tsc --noEmit)`；涉及实际 channel 行为时手动跑 Claude Code channel |
+| `hub-client/` | `(cd hub-client && bun install && bunx tsc --noEmit && bun test)`；涉及实际 channel 行为时手动跑 Claude Code channel |
 | `forge-cli/` | `(cd forge-cli && bun test)` |
 | `cli.ts` / install / uninstall / doctor | `bun cli.ts doctor`；涉及部署副作用时用临时 HOME 或明确手工记录 |
 | `forge-engine/` | `(cd forge-engine && bun install && bunx tsc --noEmit && bun test)` |
-| `hub-dashboard/` | `(cd hub-dashboard && bun install && bun run lint && bun run build)` |
+| `hub-dashboard/` | `(cd hub-dashboard && bun install && bun run lint && bun run build && bun test)` |
 | 新通道插件 | 插件手工记录：授权入站、未授权拦截、出站成功、stop 清理；能接 harness 的尽量接 |
 | 文档-only | `git -c core.quotepath=false status --short --untracked-files=all` 确认只列文档；命令和链接要能对应到当前 repo |
 
@@ -52,10 +52,10 @@ fh hub self-test                # 走对外 CLI 包装再跑一遍
 
 ```bash
 (cd hub-server && bun install && bunx tsc --noEmit && bun test)
-(cd hub-client && bun install && bunx tsc --noEmit)
+(cd hub-client && bun install && bunx tsc --noEmit && bun test)
 (cd forge-cli && bun test)
 (cd forge-engine && bun install && bunx tsc --noEmit && bun test)
-(cd hub-dashboard && bun install && bun run lint && bun run build)
+(cd hub-dashboard && bun install && bun run lint && bun run build && bun test)
 bun hub-test-harness/harness.ts
 fh hub self-test
 ```
