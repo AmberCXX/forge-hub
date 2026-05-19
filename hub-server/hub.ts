@@ -454,11 +454,9 @@ function onMessageImpl(msg: InboundMessage): InboundHandleResult {
     return { accepted: true, reason: "queued", targets: filtered, targeted: result.targeted };
   }
   const pushFailed = pushToInstances(filtered, payload);
-  if (pushFailed.length > 0 && pushFailed.length === filtered.length) {
+  if (pushFailed.length > 0) {
     enqueue(msg.channel, payload);
-    log(`⚠ 全部 ${pushFailed.length} 个实例推送失败（buffer full），消息已入队`);
-  } else if (pushFailed.length > 0) {
-    log(`⚠ ${pushFailed.length}/${filtered.length} 个实例推送失败，${filtered.length - pushFailed.length} 个已送达`);
+    log(`⚠ ${pushFailed.length}/${filtered.length} 个实例推送失败，消息已入队`);
   }
   const targetInfo = result.targeted ? ` → ${filtered.join(",")}` : "";
   log(`← [${msg.channel}] ${msg.from}${targetInfo}: ${result.content.slice(0, 60)}${result.content.length > 60 ? "..." : ""}`);

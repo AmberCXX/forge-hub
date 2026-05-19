@@ -258,7 +258,8 @@ export function pushToInstances(targetIds: string[], event: HubEvent): string[] 
     const instance = instances.get(id);
     if (instance) {
       const status = instance.send(event);
-      if (status <= 0) failed.push(id);
+      // 0 = dropped (connection closed); -1 = backpressure (queued by Bun, will deliver)
+      if (status === 0) failed.push(id);
     }
   }
   return failed;

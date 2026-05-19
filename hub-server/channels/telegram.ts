@@ -109,8 +109,8 @@ async function tgApi(method: string, body?: Record<string, unknown>): Promise<an
   }
   if (PROXY_URL) opts.proxy = PROXY_URL;
   const res = await fetch(url, opts);
-  const data = await res.json() as { ok: boolean; result?: any; description?: string };
-  if (!data.ok) throw new Error(data.description ?? `API error: ${method}`);
+  const data = await res.json() as { ok: boolean; result?: any; description?: string; error_code?: number; parameters?: { retry_after?: number } };
+  if (!data.ok) throw new TelegramError(data.description ?? `API error: ${method}`, data.error_code, data.parameters);
   return data.result;
 }
 
