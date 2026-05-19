@@ -81,7 +81,7 @@ export function sanitizeDisplayName(input: string): SanitizeResult {
   return sanitizeExternalField(input, 64);
 }
 
-export function sanitizeMessagePreview(input: string): SanitizeResult {
+function sanitizeMessagePreview(input: string): SanitizeResult {
   return sanitizeExternalField(input, 500);
 }
 
@@ -89,6 +89,6 @@ export function sanitizeFileName(input: string): SanitizeResult {
   return sanitizeExternalField(input, 128);
 }
 
-export function sanitizeCaption(input: string): SanitizeResult {
+function sanitizeCaption(input: string): SanitizeResult {
   return sanitizeExternalField(input, 500);
 }

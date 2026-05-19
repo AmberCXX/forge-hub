@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { apiFetch, generateClientId } from "./wechat-ilink.js";
-import { MSG_TYPE_BOT, MSG_STATE_FINISH } from "./wechat-types.js";
+import { MSG_TYPE_BOT, MSG_STATE_FINISH, type MessageItem } from "./wechat-types.js";
 import { execFileText } from "../process-utils.js";
 import { assertRealPathInsideDir, sanitizeMediaFileName } from "../media-path.js";
 import {
@@ -102,14 +102,6 @@ function detectImageExt(buf: Buffer): string {
 }
 
 // ── Media Download ──────────────────────────────────────────────────────────
-
-interface MessageItem {
-  type?: number;
-  image_item?: { media?: { encrypt_query_param?: string; aes_key?: string }; aeskey?: string };
-  voice_item?: { media?: { encrypt_query_param?: string; aes_key?: string }; text?: string };
-  file_item?: { media?: { encrypt_query_param?: string; aes_key?: string }; file_name?: string };
-  video_item?: { media?: { encrypt_query_param?: string; aes_key?: string } };
-}
 
 export interface DownloadedMedia {
   type: "image" | "voice" | "file" | "video";

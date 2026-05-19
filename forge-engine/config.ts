@@ -11,9 +11,9 @@ export const CHANNEL_VERSION = "0.1.0";
 
 // ── Paths ───────────────────────────────────────────────────────────────────
 
-export const CODE_DIR = import.meta.dir;
+const CODE_DIR = import.meta.dir;
 
-export const DATA_DIR = process.env.FORGE_ENGINE_DATA
+const DATA_DIR = process.env.FORGE_ENGINE_DATA
   ?? path.join(process.env.HOME || "~", ".forge-hub", "engine-data");
 
 export const DIR = DATA_DIR;

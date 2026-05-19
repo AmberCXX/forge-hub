@@ -42,13 +42,13 @@ export const HUB_VERSION = "0.2.0";
 // 所有路径用函数而非常量——确保测试在任何时间点设 env 都能拿到正确的值。
 // 模块级常量在 import 时就定死了，bun test 多文件并行时模块缓存导致 env 时序不可控。
 export function getHubDir(): string { return process.env.FORGE_HUB_DIR || path.join(process.env.HOME || "~", ".forge-hub"); }
-export function getConfigFile(): string { return path.join(getHubDir(), "hub-config.json"); }
+function getConfigFile(): string { return path.join(getHubDir(), "hub-config.json"); }
 export function getStateDir(): string { return path.join(getHubDir(), "state"); }
-export function getLogFile(): string { return path.join(getHubDir(), "hub.log"); }
-export function getAuditFile(): string { return path.join(getHubDir(), "audit.jsonl"); }
-export function getPidFile(): string { return path.join(getHubDir(), "hub.pid"); }
-export function getLockFile(): string { return path.join(getHubDir(), "lock.json"); }
-export function getApiTokenFile(): string { return path.join(getHubDir(), "api-token"); }
+function getLogFile(): string { return path.join(getHubDir(), "hub.log"); }
+function getAuditFile(): string { return path.join(getHubDir(), "audit.jsonl"); }
+function getPidFile(): string { return path.join(getHubDir(), "hub.pid"); }
+function getLockFile(): string { return path.join(getHubDir(), "lock.json"); }
+function getApiTokenFile(): string { return path.join(getHubDir(), "api-token"); }
 
 // 向后兼容——生产代码启动时读一次缓存，避免热路径反复拼字符串
 export const HUB_DIR = getHubDir();

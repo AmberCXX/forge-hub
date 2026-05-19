@@ -1,6 +1,6 @@
 {
   "name": "forge-hub-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Forge Hub Server — 多通道消息总线，常驻进程",
   "type": "module",
   "private": true,

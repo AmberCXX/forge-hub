@@ -154,6 +154,6 @@ export function findAllowlistEntry(channel: string, senderId: string): AllowEntr
   return loadAllowlist(channel).allowed.find((entry) => isAuthorizedSenderMatch(channel, senderId, entry.id));
 }
 
-export function getPrimaryAllowlistEntry(channel: string): AllowEntry | undefined {
+function getPrimaryAllowlistEntry(channel: string): AllowEntry | undefined {
   return loadAllowlist(channel).allowed[0];
 }

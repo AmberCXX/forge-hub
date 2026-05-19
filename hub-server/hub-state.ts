@@ -52,6 +52,6 @@ export function setDashboardPresence(active: boolean): void {
   _dashboardPresence = { lastSeen: new Date(), active };
 }
 
-export function getDashboardPresence(): { lastSeen: Date; active: boolean } {
+function getDashboardPresence(): { lastSeen: Date; active: boolean } {
   return _dashboardPresence;
 }

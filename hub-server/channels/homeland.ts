@@ -32,11 +32,11 @@ export function removeSSEClient(client: SSEClient): void {
   sseClients.delete(client);
 }
 
-export function getSSEClientCount(): number {
+function getSSEClientCount(): number {
   return sseClients.size;
 }
 
-export function broadcastHomelandMessage(data: { from: string; fromInstance: string; content: string; ts: string }): void {
+function broadcastHomelandMessage(data: { from: string; fromInstance: string; content: string; ts: string }): void {
   broadcastSSE("message", data);
 }
 
@@ -44,7 +44,7 @@ export function broadcastHomelandApproval(data: unknown): void {
   broadcastSSE("approval", data);
 }
 
-export function broadcastHomelandStatus(data: unknown): void {
+function broadcastHomelandStatus(data: unknown): void {
   broadcastSSE("status", data);
 }
 

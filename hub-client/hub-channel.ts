@@ -608,7 +608,7 @@ function persistToolIdentity(config: SessionConfig | null | undefined): void {
 // ── MCP Channel Server ─────────────────────────────────────────────────────
 
 mcpServer = new Server(
-  { name: "hub", version: "0.1.0" },
+  { name: "hub", version: "0.2.0" },
   {
     capabilities: {
       experimental: {

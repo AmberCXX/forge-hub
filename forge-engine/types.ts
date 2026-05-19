@@ -13,6 +13,8 @@ export interface ForgeConfig {
   enabled: boolean;
   scan_dir: boolean;
   contacts: Record<string, Record<string, ContactChannel>>;
+  /** 暂停到指定时间（ISO 8601）。到期后 scheduler 自动恢复 enabled 并删除此字段 */
+  pause_until?: string;
 }
 
 // ── 原始调度条目（配置文件里的格式） ────────────────────────────────────────

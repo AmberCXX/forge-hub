@@ -1,6 +1,6 @@
 {
   "name": "forge-hub-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Forge Hub Client — 通用 MCP channel，连接 Hub 接收所有通道消息",
   "type": "module",
   "private": true,

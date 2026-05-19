@@ -162,7 +162,7 @@ function buildRegistrySnapshot(): LoadResult {
         const current = plugins.get(name);
         if (!current) return { success: false, error: `通道 ${name} 已卸载` };
         // 强制 capabilities：不在 capabilities 列表的 type 直接拒绝，不调 plugin.send
-        if (current.capabilities && current.capabilities.length > 0 && !current.capabilities.includes(p.type as any)) {
+        if (current.capabilities && current.capabilities.length > 0 && !current.capabilities.includes(p.type)) {
           return { success: false, error: `通道 ${name} 不支持 ${p.type}（capabilities: ${current.capabilities.join(",")}）` };
         }
         return current.send(p);

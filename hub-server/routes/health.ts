@@ -25,7 +25,7 @@ function buildChannelHealth() {
       return [ch, {
         loaded: true,
         ...h,
-        health_status: deriveHealthStatus(h as any),
+        health_status: deriveHealthStatus(h),
         ...(stoppedReason ? { stoppedReason } : {}),
       }];
     })

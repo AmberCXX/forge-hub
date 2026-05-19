@@ -76,7 +76,7 @@ export function triggerLock(by: string): void {
   // Notify all WebSocket instances
   const instances = getInstances();
   pushToInstances([...instances.keys()], {
-    type: "system" as any,
+    type: "system",
     channel: "hub",
     from: "system",
     fromId: "system",
@@ -97,7 +97,7 @@ export function triggerUnlock(): void {
   // Notify all WebSocket instances
   const instances = getInstances();
   pushToInstances([...instances.keys()], {
-    type: "system" as any,
+    type: "system",
     channel: "hub",
     from: "system",
     fromId: "system",

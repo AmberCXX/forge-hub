@@ -399,11 +399,10 @@ function saveSchedule(): void {
 // ── Reload ──────────────────────────────────────────────────────────────────
 
 function checkPauseExpiry(config: ForgeConfig): void {
-  const c = config as any;
-  if (!c.enabled && c.pause_until) {
-    if (Date.now() >= new Date(c.pause_until).getTime()) {
-      c.enabled = true;
-      delete c.pause_until;
+  if (!config.enabled && config.pause_until) {
+    if (Date.now() >= new Date(config.pause_until).getTime()) {
+      config.enabled = true;
+      delete config.pause_until;
       try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8"); } catch (err) { logError(`暂停恢复写回失败: ${String(err)}`); }
       log("⏯ Engine 暂停到期，已自动恢复");
     }

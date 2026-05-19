@@ -368,7 +368,7 @@ export function setInstanceChannels(instanceId: string, channels: string[] | und
 
 // ── Find by Name ────────────────────────────────────────────────────────────
 
-export function findByTag(tag: string): ConnectedInstance | undefined {
+function findByTag(tag: string): ConnectedInstance | undefined {
   for (const instance of instances.values()) {
     if (instance.tag === tag) return instance;
   }
