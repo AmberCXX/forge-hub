@@ -10,6 +10,9 @@
 - **紧急锁定** — 任意通道发自定暗号，立即冻结所有远程
 - **通道自愈** — watchdog 每 2 分钟扫描，unhealthy 通道自动重启
 - **实验性定时引擎** — [Forge Engine](forge-engine/) 按 schedule 给 Claude 发心跳、提醒、指令；源码已提供，但需要单独手动配置
+- **消息队列** — 没有实例在线时，入站消息自动排队（SQLite，24h TTL），实例重连后按序投递。Hub 重启或 CC session 间隙不丢消息。队列文件：`~/.forge-hub/queue.db`
+- **全文搜索** *(可选)* — 在 `hub-config.json` 设 `search_index: true` 启用。`GET /search?q=keyword` 或 `fh hub search <keyword>` 搜索全通道聊天历史。SQLite FTS5 + trigram tokenizer，CJK 友好。索引文件：`~/.forge-hub/search.db`
+- **自定义 Agent 名称** — 在 `hub-config.json` 设 `agent_name` 或环境变量 `HUB_AGENT_NAME`，自定义出站消息的发送者名称（默认 `"Forge"`）
 
 基于 Anthropic 官方 [Channels 协议](https://code.claude.com/docs/en/channels-reference) + 各平台官方 API（Telegram Bot API / Lark Open API / Tencent iLink）。不逆向、不绕开、不盗 token。
 
@@ -237,6 +240,7 @@ fh hub listen wx tg        # 当前实例订阅 wechat + telegram
 fh hub allow <ch> <id> <昵称>   # 加 allowlist（默认终端 y/n 二次确认）
 fh hub pending             # 当前挂起的审批
 fh hub resolve <id>        # 手动清 stale pending
+fh hub search <keyword>    # 全文搜索聊天历史（需 search_index: true）
 fh hub self-test           # 跑 8 场景独立测试
 fh hub lock / unlock       # 紧急锁定 / 解锁
 fh engine list             # 查看 engine 定时任务

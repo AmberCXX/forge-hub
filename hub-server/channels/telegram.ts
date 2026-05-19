@@ -16,6 +16,66 @@ import { assertRealPathInsideDir, sanitizeMediaFileName } from "../media-path.js
 import { writeResponseToFileWithMediaLimit } from "../media-policy.js";
 import { STATE_DIR } from "../config.js";
 
+// ── Bun-specific fetch types ───────────────────────────────────────────────
+
+/** Bun extends RequestInit with proxy and timeout options. */
+type BunFetchInit = RequestInit & { proxy?: string; timeout?: boolean | number };
+
+// ── Telegram API types ─────────────────────────────────────────────────────
+
+interface TgFileRef {
+  file_id: string;
+  file_unique_id: string;
+  file_size?: number;
+  mime_type?: string;
+  file_name?: string;
+  emoji?: string;
+}
+
+interface TgUser {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+}
+
+interface TgMessage {
+  message_id: number;
+  chat: { id: number };
+  from?: TgUser;
+  text?: string;
+  caption?: string;
+  photo?: TgFileRef[];
+  document?: TgFileRef;
+  voice?: TgFileRef;
+  sticker?: TgFileRef;
+  video?: TgFileRef;
+  animation?: unknown;
+  contact?: unknown;
+  location?: unknown;
+  forward_origin?: unknown;
+  reply_to_message?: unknown;
+  media_group_id?: string;
+}
+
+interface TgUpdate {
+  update_id: number;
+  message?: TgMessage;
+}
+
+/** Error thrown when Telegram API returns a non-ok response. */
+class TelegramError extends Error {
+  error_code?: number;
+  parameters?: { retry_after?: number };
+
+  constructor(message: string, error_code?: number, parameters?: { retry_after?: number }) {
+    super(message);
+    this.name = "TelegramError";
+    this.error_code = error_code;
+    this.parameters = parameters;
+  }
+}
+
 // ── Module State ────────────────────────────────────────────────────────────
 
 let hub: HubAPI;
@@ -39,7 +99,7 @@ const PROXY_URL = process.env.https_proxy || process.env.http_proxy || "";
 
 async function tgApi(method: string, body?: Record<string, unknown>): Promise<any> {
   const url = `https://api.telegram.org/bot${botToken}/${method}`;
-  const opts: RequestInit & { proxy?: string; signal?: AbortSignal } = {
+  const opts: BunFetchInit = {
     signal: AbortSignal.timeout(15_000),
   };
   if (body) {
@@ -57,7 +117,7 @@ async function tgApi(method: string, body?: Record<string, unknown>): Promise<an
 // Fetch with hard timeout + AbortController — for getUpdates only
 let pollAbortController: AbortController | null = null;
 
-async function tgApiPolling(body: Record<string, unknown>, timeoutMs: number): Promise<any> {
+async function tgApiPolling(body: Record<string, unknown>, timeoutMs: number): Promise<TgUpdate[]> {
   pollAbortController = new AbortController();
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const combined = AbortSignal.any([pollAbortController.signal, timeoutSignal]);
@@ -71,19 +131,16 @@ async function tgApiPolling(body: Record<string, unknown>, timeoutMs: number): P
     timeout: false, // Disable Bun's built-in 5-min idle timeout
   };
   if (PROXY_URL) fetchOpts.proxy = PROXY_URL;
-  const res = await fetch(url, fetchOpts as any);
+  const res = await fetch(url, fetchOpts as BunFetchInit);
 
   const data = await res.json() as {
-    ok: boolean; result?: any; description?: string;
+    ok: boolean; result?: TgUpdate[]; description?: string;
     error_code?: number; parameters?: { retry_after?: number };
   };
   if (!data.ok) {
-    const err = new Error(data.description ?? "getUpdates error") as any;
-    err.error_code = data.error_code;
-    err.parameters = data.parameters;
-    throw err;
+    throw new TelegramError(data.description ?? "getUpdates error", data.error_code, data.parameters);
   }
-  return data.result;
+  return data.result ?? [];
 }
 
 // ── Allowlist ───────────────────────────────────────────────────────────────
@@ -98,7 +155,7 @@ async function downloadTgFile(fileId: string, fileName: string): Promise<string 
     const file = await tgApi("getFile", { file_id: fileId }) as { file_path?: string };
     if (!file.file_path) return null;
     const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
-    const res = await fetch(url, (PROXY_URL ? { proxy: PROXY_URL } : {}) as any);
+    const res = await fetch(url, (PROXY_URL ? { proxy: PROXY_URL } : {}) as BunFetchInit);
     if (!res.ok) return null;
     await fsMod.promises.mkdir(TG_MEDIA_DIR, { recursive: true });
     const safeName = sanitizeMediaFileName(fileName);
@@ -143,8 +200,8 @@ interface ClassifiedError {
 }
 
 function classifyError(err: unknown): ClassifiedError {
-  const errObj = err as any;
-  const code = errObj?.error_code;
+  const isTgErr = err instanceof TelegramError;
+  const code = isTgErr ? err.error_code : undefined;
   const msg = String(err).toLowerCase();
 
   // conflict (409): 另一个 polling 实例在跑。不硬停——等 35s 后重试，
@@ -152,7 +209,7 @@ function classifyError(err: unknown): ClassifiedError {
   if (code === 409) return { type: "conflict", retryable: true, retryAfter: 35 };
   if (code === 401) return { type: "auth", retryable: false };
   if (code === 429) {
-    return { type: "ratelimit", retryable: true, retryAfter: errObj?.parameters?.retry_after ?? 5 };
+    return { type: "ratelimit", retryable: true, retryAfter: (isTgErr ? err.parameters?.retry_after : undefined) ?? 5 };
   }
   if (code && code >= 500) return { type: "server", retryable: true };
   if (msg.includes("abort") || msg.includes("socket") || msg.includes("connect") ||
@@ -198,7 +255,7 @@ async function startPolling(): Promise<void> {
         offset,
         timeout: POLL_TIMEOUT_S,
         allowed_updates: ["message"],
-      }, FETCH_HARD_TIMEOUT_MS) as any[];
+      }, FETCH_HARD_TIMEOUT_MS);
 
       // ── Success ────────────────────────────────────────────
       lastSuccessfulPollAt = Date.now();
@@ -419,7 +476,7 @@ const plugin: ChannelPlugin = {
           if (content) form.append("caption", content);
           const docOpts: Record<string, unknown> = { method: "POST", body: form };
           if (PROXY_URL) docOpts.proxy = PROXY_URL;
-          const res = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, docOpts as any);
+          const res = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, docOpts as BunFetchInit);
           const data = await res.json() as { ok: boolean; description?: string };
           if (!data.ok) throw new Error(data.description ?? "upload failed");
         }
@@ -434,7 +491,7 @@ const plugin: ChannelPlugin = {
         form.append("voice", new Blob([voiceBuffer]), "voice.ogg");
         const voiceOpts: Record<string, unknown> = { method: "POST", body: form };
         if (PROXY_URL) voiceOpts.proxy = PROXY_URL;
-        const res = await fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, voiceOpts as any);
+        const res = await fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, voiceOpts as BunFetchInit);
         const data = await res.json() as { ok: boolean; description?: string };
         if (!data.ok) throw new Error(data.description ?? "sendVoice failed");
         hub.log(`→ 语音: "${content.slice(0, 30)}..."`);
@@ -460,7 +517,7 @@ const plugin: ChannelPlugin = {
             form.append("voice", new Blob([voiceBuffer]), "voice.ogg");
             const voiceOpts: Record<string, unknown> = { method: "POST", body: form };
             if (PROXY_URL) voiceOpts.proxy = PROXY_URL;
-            const res = await fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, voiceOpts as any);
+            const res = await fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, voiceOpts as BunFetchInit);
             const data = await res.json() as { ok: boolean; description?: string };
             if (!data.ok) throw new Error(data.description ?? "sendVoice failed");
           }
