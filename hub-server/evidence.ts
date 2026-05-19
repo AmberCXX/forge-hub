@@ -44,37 +44,30 @@ export function encodeRawUpdate(rawJson: string): string {
 }
 
 // ── Chain State ────────────────────────────────────────────────────────────
+// Hash chain state is derived from the JSONL file itself (last entry's
+// entry_hash), not a separate file. This eliminates the non-atomic window
+// between appendFileSync and writeChainState that could break the chain
+// on crash.
 
-function chainStatePath(): string {
-  return path.join(getEvidenceDir(), "evidence_chain.json");
-}
+let cachedLastHash: string | null = null;
 
-interface ChainState {
-  last_entry_hash: string | null;
-}
-
-let cachedChainState: ChainState | null = null;
-let cachedChainStatePath: string | null = null;
-
-function readChainState(): ChainState {
-  const statePath = chainStatePath();
-  if (cachedChainState && cachedChainStatePath === statePath) return cachedChainState;
+function readLastHashFromJSONL(): string | null {
+  if (cachedLastHash !== null) return cachedLastHash;
   try {
-    const raw = fs.readFileSync(statePath, "utf-8");
-    cachedChainState = JSON.parse(raw) as ChainState;
-    cachedChainStatePath = statePath;
-    return cachedChainState;
-  } catch {
-    cachedChainState = { last_entry_hash: null };
-    cachedChainStatePath = statePath;
-    return cachedChainState;
-  }
-}
-
-function writeChainState(state: ChainState): void {
-  cachedChainState = state;
-  cachedChainStatePath = chainStatePath();
-  fs.writeFileSync(chainStatePath(), JSON.stringify(state, null, 2), { encoding: "utf-8", mode: 0o600 });
+    const filePath = currentMonthFile();
+    if (!fs.existsSync(filePath)) return null;
+    const content = fs.readFileSync(filePath, "utf-8");
+    const lines = content.trimEnd().split("\n");
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      try {
+        const record = JSON.parse(line) as { entry_hash?: string };
+        if (record.entry_hash) return record.entry_hash;
+      } catch { /* skip malformed line, try previous */ }
+    }
+  } catch { /* file not readable */ }
+  return null;
 }
 
 // ── Dedup ──────────────────────────────────────────────────────────────────
@@ -177,8 +170,7 @@ function findExistingRecord(channel: string, updateId: string): EvidenceRecord |
 function buildAndWrite(input: AppendInput, key: string): EvidenceRecord {
   ensureEvidenceDir();
 
-  const chainState = readChainState();
-  const prevHash = chainState.last_entry_hash;
+  const prevHash = readLastHashFromJSONL();
 
   const record: Record<string, unknown> = {
     evidence_id: crypto.randomUUID(),
@@ -199,13 +191,7 @@ function buildAndWrite(input: AppendInput, key: string): EvidenceRecord {
     throw err;
   }
 
-  try {
-    writeChainState({ last_entry_hash: entryHash });
-  } catch (err) {
-    logError(`evidence chain state 更新失败: ${String(err)}`);
-    throw err;
-  }
-
+  cachedLastHash = entryHash;
   seenKeys.add(key);
   evictIfNeeded();
 
