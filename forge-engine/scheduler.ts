@@ -298,7 +298,7 @@ function appendLog(entry: ResolvedEntry, content: string): void {
   try {
     rotateTriggerLogIfNeeded();
     fs.appendFileSync(ACTION_LOG_FILE, line, "utf-8");
-  } catch {}
+  } catch (err) { logError(`触发日志写入失败: ${String(err)}`); }
 }
 
 function appendSystemLog(event: string): void {
@@ -307,7 +307,7 @@ function appendSystemLog(event: string): void {
   try {
     rotateTriggerLogIfNeeded();
     fs.appendFileSync(ACTION_LOG_FILE, line, "utf-8");
-  } catch {}
+  } catch (err) { logError(`系统日志写入失败: ${String(err)}`); }
 }
 
 function updateState(sender: string): void {
@@ -393,7 +393,7 @@ function saveSchedule(): void {
         origin: e.origin,
       })),
     }, null, 2), "utf-8");
-  } catch {}
+  } catch (err) { logError(`schedule 快照写入失败: ${String(err)}`); }
 }
 
 // ── Reload ──────────────────────────────────────────────────────────────────
@@ -404,7 +404,7 @@ function checkPauseExpiry(config: ForgeConfig): void {
     if (Date.now() >= new Date(c.pause_until).getTime()) {
       c.enabled = true;
       delete c.pause_until;
-      try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8"); } catch {}
+      try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8"); } catch (err) { logError(`暂停恢复写回失败: ${String(err)}`); }
       log("⏯ Engine 暂停到期，已自动恢复");
     }
   }
@@ -468,9 +468,9 @@ function cleanExpiredTasks(): void {
           log(`🧹 过期任务已清理: ${file}`);
           appendSystemLog(`过期任务已清理: ${file}`);
         }
-      } catch {}
+      } catch (err) { logError(`过期任务清理失败 (${file}): ${String(err)}`); }
     }
-  } catch {}
+  } catch (err) { logError(`过期任务目录扫描失败: ${String(err)}`); }
 }
 
 // ── Midnight ────────────────────────────────────────────────────────────────

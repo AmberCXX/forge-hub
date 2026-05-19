@@ -868,7 +868,7 @@ function hubAllowlist(args: string[]) {
           console.log(`  ${e.nickname} — ${e.id}${ownerMark}`);
         }
       }
-    } catch {}
+    } catch (err) { console.error(`读取 allowlist 失败: ${String(err)}`); }
     return;
   }
 
