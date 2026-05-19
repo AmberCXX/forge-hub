@@ -16,7 +16,8 @@
  */
 
 import fs from "node:fs";
-import type { ChannelPlugin, HubAPI, SendParams, SendResult, Allowlist } from "../hub-server/types.js";
+import type { ChannelPlugin, HubAPI, SendParams, SendResult } from "../hub-server/types.js";
+import { recordUnauthorizedEvidence } from "../hub-server/evidence.js";
 
 const PORT = 8787;
 const OUT_LOG = "/tmp/echo-channel-out.log";
@@ -26,30 +27,16 @@ const OUT_LOG = "/tmp/echo-channel-out.log";
 let hub: HubAPI;
 let server: ReturnType<typeof Bun.serve> | null = null;
 
-// ── Allowlist（约定 schema，见 guide §4） ─────────────────────────────────────
-
-// Allowlist schema 是所有通道统一的——从 types.ts import 而非本地定义。见 guide §4。
-
-function getAllowlist(): Allowlist {
-  // 用 getState<T> 泛型避免手动 cast
-  return hub.getState<Allowlist>("allowlist") ?? { allowed: [], auto_allow_next: false };
-}
-
-function isAllowed(senderId: string): boolean {
-  return getAllowlist().allowed.some((e) => e.id === senderId);
-}
-
-function getNickname(senderId: string): string {
-  return getAllowlist().allowed.find((e) => e.id === senderId)?.nickname ?? senderId;
-}
-
 // ── Plugin ──────────────────────────────────────────────────────────────────
+// Allowlist 读取不用自己写——HubAPI 提供 hub.isAllowed() 和 hub.getNickname()。
+// schema 说明见 guide §4。
 
 const plugin: ChannelPlugin = {
   name: "echo",
   displayName: "Echo",
   aliases: ["e"],
   capabilities: ["text", "file"],
+  formatHints: "纯文本，不支持 Markdown 或富文本格式。",
 
   async start(hubAPI) {
     hub = hubAPI;
@@ -73,20 +60,35 @@ const plugin: ChannelPlugin = {
           const content = body.content ?? "";
           if (!content) return new Response("empty content", { status: 400 });
 
-          // 非主人处理——见 guide §4
-          if (!isAllowed(senderId)) {
-            hub.logError(`⛔ 拒绝未授权: ${senderId}`);
-            hub.pushMessage({
-              channel: "echo",
-              from: "system",
-              fromId: "system",
-              content: hub.formatUnauthorizedNotice(displayName, senderId, content),
-              raw: {},
+          // ── 非主人处理（evidence + security event + 静默丢弃）── 见 guide §4
+          if (!hub.isAllowed(senderId)) {
+            // 1. 写 evidence vault（磁盘落盘，fh hub security evidence 可查）
+            const evidence = recordUnauthorizedEvidence({
+              channel: plugin.name,
+              ingestMode: "http",           // echo 通道的入站方式是 HTTP POST
+              updateId: String(Date.now()), // echo 没有平台侧 update ID，用时间戳代替
+              chatId: senderId,
+              messageId: null,
+              sourceUserId: senderId,
+              contentType: "text",
+              contentMeta: {},
+              rawJson: JSON.stringify(body),
+              displayName,
+              logError: (m) => hub.logError(m),
             });
-            return new Response("blocked", { status: 403 });
+
+            // 2. 记录聚合安全事件（Hub 层限频，最多 1 条/小时极简提醒推给 agent）
+            hub.recordSecurityEvent({
+              sourceUserId: senderId,
+              contentType: "text",
+              evidenceId: evidence?.evidence_id ?? "",
+            });
+
+            // 3. 静默丢弃——不 pushMessage，不回复外部发送者
+            return new Response("ok", { status: 200 });
           }
 
-          const nick = getNickname(senderId);
+          const nick = hub.getNickname(senderId);
           hub.log(`← ${nick}: ${content.slice(0, 80)}`);
           hub.pushMessage({
             channel: "echo",
