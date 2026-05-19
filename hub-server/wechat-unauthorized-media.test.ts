@@ -18,6 +18,8 @@ function fakeHubAPI(overrides: Partial<HubAPI> = {}): HubAPI {
     isAllowed() { return false; },
     getNickname(senderId: string) { return senderId; },
     recordSecurityEvent() {},
+    reportReady() {},
+    reportFailed() {},
     ...overrides,
   };
 }

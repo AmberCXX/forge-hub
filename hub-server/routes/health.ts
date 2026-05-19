@@ -3,7 +3,7 @@ import {
   deriveHealthStatus, getAllChannelHealth,
 } from "../config.js";
 import { listKnownInstances } from "../instance-manager.js";
-import { channelPlugins } from "../channel-registry.js";
+import { channelPlugins, channelReadiness } from "../channel-registry.js";
 import { startedAt } from "../hub-state.js";
 import { pendingPermissions, PERMISSION_TTL_MS } from "../approval.js";
 import { readRecentHistory } from "../history.js";
@@ -22,11 +22,13 @@ function buildChannelHealth() {
     [...channelPlugins.keys()].map(ch => {
       const h = health[ch] ?? { messagesIn: 0, messagesOut: 0, errors: 0, consecutiveFailures: 0, consecutiveSuccesses: 0 };
       const stoppedReason = getPlugin(ch)?.stoppedReason;
+      const readiness = channelReadiness.get(ch);
       return [ch, {
         loaded: true,
         ...h,
         health_status: deriveHealthStatus(h),
         ...(stoppedReason ? { stoppedReason } : {}),
+        ...(readiness ? { readiness: readiness.status, ...(readiness.reason ? { readiness_reason: readiness.reason } : {}) } : {}),
       }];
     })
   );

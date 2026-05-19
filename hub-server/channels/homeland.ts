@@ -59,7 +59,7 @@ const homeland: ChannelPlugin = {
 
   async start(hubAPI: HubAPI): Promise<void> {
     hub = hubAPI;
-    hub.log("Homeland 通道就绪（本地直连，无外部依赖）");
+    hub.reportReady();
   },
 
   async send(params: SendParams): Promise<SendResult> {

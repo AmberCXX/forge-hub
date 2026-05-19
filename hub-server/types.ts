@@ -192,6 +192,10 @@ export interface HubAPI {
    * channel name 由 HubAPI factory 从 closure 注入，通道只传外部 sender/内容类别/证据 id。
    */
   recordSecurityEvent(params: ChannelSecurityEventParams): void;
+  /** 通道确认已就绪（连接建立、首次轮询成功等）。loader 用此信号区分"加载成功"和"真就绪"。 */
+  reportReady(): void;
+  /** 通道报告启动失败（凭证无效、服务不可达等）。loader 标记为 startup_failed。 */
+  reportFailed(reason: string): void;
 }
 
 export interface ChannelSecurityEventParams {

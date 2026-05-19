@@ -163,6 +163,7 @@ function startSubscription(): void {
       if (!line.trim()) return;
 
       health.onSuccess();
+      if (eventCount === 0) hub.reportReady();
       disconnectedAt = 0;
 
       let event: unknown;

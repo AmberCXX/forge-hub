@@ -12,7 +12,7 @@ import { CHANNELS_DIR, log, logError, channelLog, channelLogError, formatUnautho
 import { loadChannelState, saveChannelState, isAllowedSender, getNickname as _getNickname } from "./state.js";
 import { ChannelStartSkipError } from "./types.js";
 import type { ChannelPlugin, HubAPI, HubSecurityEventParams, InboundMessage } from "./types.js";
-import { populate as populateRegistry, type ChannelMetaEntry, type ChannelSendEntry } from "./channel-registry.js";
+import { populate as populateRegistry, channelReadiness, type ChannelMetaEntry, type ChannelSendEntry } from "./channel-registry.js";
 
 // ── State ───────────────────────────────────────────────────────────────────
 
@@ -79,6 +79,14 @@ export function createHubAPI(
         evidenceId: params.evidenceId ?? "",
       });
     },
+    reportReady() {
+      channelReadiness.set(channelName, { status: "ready" });
+      channelLog(channelName, "✓ 通道就绪");
+    },
+    reportFailed(reason: string) {
+      channelReadiness.set(channelName, { status: "failed", reason });
+      channelLogError(channelName, `通道启动失败: ${reason}`);
+    },
   };
 }
 
@@ -130,8 +138,7 @@ async function loadPlugin(
   }
 
   const hubAPI = createHubAPI(plugin.name, onMessage, onSecurityEvent);
-  // plugin.start() 允许 throw——表示 plugin 无法正常工作（如 telegram 没 bot_token）。
-  // throw 后我们不把它加入 sendMap，但 Hub 其他通道照常加载。
+  channelReadiness.set(plugin.name, { status: "loading" });
   try {
     await plugin.start(hubAPI);
   } catch (err) {

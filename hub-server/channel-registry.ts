@@ -28,6 +28,9 @@ export interface ChannelMetaEntry {
 export const channelPlugins = new Map<string, ChannelSendEntry>();
 export const channelPluginsMeta = new Map<string, ChannelMetaEntry>();
 
+export type ChannelReadiness = "loading" | "ready" | "failed";
+export const channelReadiness = new Map<string, { status: ChannelReadiness; reason?: string }>();
+
 /** 用 loadChannels 的结果 (sendMap, metaMap) 填充 registry。清空旧再填新。 */
 export function populate(
   sendMap: Map<string, ChannelSendEntry>,

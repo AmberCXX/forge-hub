@@ -260,6 +260,7 @@ async function startPolling(): Promise<void> {
       // ── Success ────────────────────────────────────────────
       lastSuccessfulPollAt = Date.now();
       health.onSuccess();
+      if (pollCount === 0) hub.reportReady();
       disconnectedAt = 0;
       pollCount++;
 

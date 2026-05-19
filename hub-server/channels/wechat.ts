@@ -34,6 +34,7 @@ let hub: HubAPI;
 let account: AccountData | null = null;
 let polling = false;
 let shouldStop = false;
+let readyReported = false;
 let health: ChannelHealth;
 
 const seenMessageIds = new Set<string>();
@@ -272,6 +273,7 @@ async function startPolling(): Promise<void> {
       }
 
       health.onSuccess();
+      if (!readyReported) { hub.reportReady(); readyReported = true; }
 
       if (resp.get_updates_buf) {
         syncBuf = resp.get_updates_buf;

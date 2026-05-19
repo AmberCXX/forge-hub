@@ -31,6 +31,7 @@ let hub: HubAPI;
 let db: Database | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let watermark = 0;
+let readyReported = false;
 let health: ChannelHealth;
 
 // ── Allowlist ───────────────────────────────────────────────────────────────
@@ -161,6 +162,7 @@ async function poll(): Promise<void> {
   try {
     await pollInner();
     health.onSuccess();
+    if (!readyReported) { hub.reportReady(); readyReported = true; }
   } catch (err) {
     if (!health.isDormant()) {
       hub.logError(`poll 异常: ${String(err)}`);
