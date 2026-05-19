@@ -256,11 +256,13 @@ export function pushToInstances(targetIds: string[], event: HubEvent): string[] 
   const failed: string[] = [];
   for (const id of targetIds) {
     const instance = instances.get(id);
-    if (instance) {
-      const status = instance.send(event);
-      // 0 = dropped (connection closed); -1 = backpressure (queued by Bun, will deliver)
-      if (status === 0) failed.push(id);
+    if (!instance) {
+      failed.push(id);
+      continue;
     }
+    const status = instance.send(event);
+    // 0 = dropped (connection closed); -1 = backpressure (queued by Bun, will deliver)
+    if (status === 0) failed.push(id);
   }
   return failed;
 }

@@ -399,6 +399,7 @@ const plugin: ChannelPlugin = {
   async stop() {
     shouldStop = true;
     readyReported = false;
+    seenMessageIds.clear();
     for (const [, { timer }] of typingState) clearTimeout(timer);
     typingState.clear();
     hub.log("停止微信轮询...");
