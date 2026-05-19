@@ -419,7 +419,7 @@ async function handleMessage(msg: Record<string, unknown>): Promise<void> {
         sender_id: msg.fromId as string,
         hub_channel: msg.channel as string,
       };
-      if (raw?.format_hints) meta.format_hints = raw.format_hints as string;
+      if (typeof raw?.format_hints === "string") meta.format_hints = raw.format_hints;
       await safeNotify({ content: msg.content as string, meta });
       break;
     }
@@ -797,7 +797,12 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ channel, to, text: msg, instance: INSTANCE_ID }),
       });
-      const data = await res.json() as { success: boolean; error?: string; warning?: string };
+      let data: { success: boolean; error?: string; warning?: string };
+      try {
+        data = (await res.json()) as typeof data;
+      } catch (err) {
+        return text(`Hub /send 响应非 JSON (HTTP ${res.status}): ${String(err)}`);
+      }
       if (!data.success) return text(`发送失败: ${data.error}`);
       return text(data.warning ? `sent\n⚠️ ${data.warning}` : "sent");
     } catch (err) {
@@ -814,7 +819,12 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ channel, to, path, instance: INSTANCE_ID }),
       });
-      const data = await res.json() as { success: boolean; error?: string; warning?: string };
+      let data: { success: boolean; error?: string; warning?: string };
+      try {
+        data = (await res.json()) as typeof data;
+      } catch (err) {
+        return text(`Hub /send-file 响应非 JSON (HTTP ${res.status}): ${String(err)}`);
+      }
       if (!data.success) return text(`发送失败: ${data.error}`);
       return text(data.warning ? `sent\n⚠️ ${data.warning}` : "sent");
     } catch (err) {
@@ -831,7 +841,12 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ channel, to, text: msg, instance: INSTANCE_ID }),
       });
-      const data = await res.json() as { success: boolean; error?: string; warning?: string };
+      let data: { success: boolean; error?: string; warning?: string };
+      try {
+        data = (await res.json()) as typeof data;
+      } catch (err) {
+        return text(`Hub /send-voice 响应非 JSON (HTTP ${res.status}): ${String(err)}`);
+      }
       if (!data.success) return text(`发送失败: ${data.error}`);
       return text(data.warning ? `voice sent\n⚠️ ${data.warning}` : "voice sent");
     } catch (err) {
@@ -848,7 +863,12 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
       if (since_ts) qs.set("since_ts", since_ts);
       const res = await fetch(`${HUB_URL}/history?${qs.toString()}`, { headers: authHeaders() });
       if (!res.ok) return text(`Hub /history HTTP ${res.status}`);
-      const data = (await res.json()) as { channel: string; history: { ts: string; direction?: string; from?: string; text?: string }[] };
+      let data: { channel: string; history: { ts: string; direction?: string; from?: string; text?: string }[] };
+      try {
+        data = (await res.json()) as typeof data;
+      } catch (err) {
+        return text(`Hub /history 响应非 JSON (HTTP ${res.status}): ${String(err)}`);
+      }
       if (!data.history || data.history.length === 0) {
         return text(`【${channel} 历史】无匹配条目${since_ts ? `（since ${since_ts}）` : ""}`);
       }

@@ -290,7 +290,7 @@ async function pollInner(): Promise<void> {
           }
         }
         if (parts.length > 0) attachmentInfo = parts.join("\n");
-      } catch {}
+      } catch (err) { hub.logError(`附件查询失败: ${String(err)}`); }
     }
 
     const content = [text, attachmentInfo].filter(Boolean).join("\n") || "[附件]";

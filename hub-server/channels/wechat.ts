@@ -66,7 +66,7 @@ function startTyping(senderId: string, contextToken: string): void {
         try { await sendTyping(baseUrl, token, senderId, ticket, TYPING_STATUS_CANCEL); } catch {}
       }, TYPING_AUTO_CANCEL_MS);
       typingState.set(senderId, { ticket, timer });
-    } catch {}
+    } catch (err) { hub?.logError(`typing 指示器失败: ${String(err)}`); }
   })();
 }
 

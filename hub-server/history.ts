@@ -64,7 +64,7 @@ export async function readRecentHistoryFile(
         const entry = JSON.parse(trimmed) as HistoryEntry;
         if (sinceTs && (typeof entry.ts !== "string" || entry.ts <= sinceTs)) return;
         entries.push(entry);
-      } catch {}
+      } catch { /* malformed JSON line — skip */ }
     };
 
     while (position > 0 && entries.length < limit) {

@@ -157,7 +157,7 @@ async function rotateIfNeeded(incomingBytes: number): Promise<void> {
       }
     }
     knownLogSize = 0;
-  } catch {}
+  } catch (err) { logError(`日志轮转失败: ${String(err)}`); }
 }
 
 // ── Ensure Directories ──────────────────────────────────────────────────────
@@ -176,16 +176,16 @@ export function readPreviousPid(): number | null {
     if (fs.existsSync(PID_FILE)) {
       return parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10) || null;
     }
-  } catch {}
+  } catch { /* PID file may not exist */ }
   return null;
 }
 
 export function writePid(): void {
-  try { fs.writeFileSync(PID_FILE, String(process.pid), "utf-8"); } catch {}
+  try { fs.writeFileSync(PID_FILE, String(process.pid), "utf-8"); } catch { /* best-effort */ }
 }
 
 export function removePid(): void {
-  try { fs.unlinkSync(PID_FILE); } catch {}
+  try { fs.unlinkSync(PID_FILE); } catch { /* best-effort */ }
 }
 
 // ── Lock State ──────────────────────────────────────────────────────────────

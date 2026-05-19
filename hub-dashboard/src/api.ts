@@ -138,11 +138,6 @@ export async function denyFromDashboard(requestId: string): Promise<boolean> {
   return data?.success ?? false;
 }
 
-export async function dismissFromDashboard(requestId: string): Promise<boolean> {
-  const data = await post<{ success: boolean }>(`/pending/${requestId}/dismiss`, {});
-  return data?.success ?? false;
-}
-
 export async function reportPresence(active: boolean): Promise<void> {
   await post("/homeland/presence", { active });
 }

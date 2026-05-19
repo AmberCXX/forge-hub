@@ -112,15 +112,3 @@ export function adaptChannel(id: string, health: ChannelHealth): DesignChannel {
   };
 }
 
-export function adaptApproval(a: { request_id: string; tool_name: string; description: string; from_instance: string; waited_seconds: number; remaining_seconds: number }): DesignApproval {
-  return {
-    id: a.request_id,
-    ai: a.from_instance,
-    tool: a.tool_name,
-    intent: a.description,
-    command: a.tool_name,
-    risk: "unknown",
-    requestedAt: `${Math.floor(a.waited_seconds / 60)} 分钟前`,
-    time: ago(new Date(Date.now() - a.waited_seconds * 1000).toISOString()),
-  };
-}

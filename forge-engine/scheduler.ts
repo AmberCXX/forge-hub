@@ -14,6 +14,7 @@ import {
   SCHEDULE_FILE,
   SCHEDULE_DIR,
   ACTION_LOG_FILE,
+  PID_FILE,
   log,
   logError,
 } from "./config.js";
@@ -59,6 +60,7 @@ let midnightTimer: ReturnType<typeof setTimeout> | null = null;
 let handlers = new Map<string, ScheduleHandler>();
 let currentConfig: ForgeConfig = { enabled: true, scan_dir: true, contacts: {} };
 let reloadDebounce: ReturnType<typeof setTimeout> | null = null;
+let isPassive = false;
 
 // ── Random Expansion ────────────────────────────────────────────────────────
 
@@ -499,6 +501,65 @@ function scheduleMidnight(server: Server): void {
   log(`🌙 下次重排: 明天 00:00（${Math.round(delay / 60000)} 分钟后）`);
 }
 
+// ── PID Lock ───────────────────────────────────────────────────────────────
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Try to acquire the PID lock.
+ * Returns true if this instance should be the active scheduler.
+ * Returns false if another live instance already holds the lock (passive mode).
+ */
+function acquirePidLock(): boolean {
+  try {
+    // Attempt exclusive create — fails if file already exists
+    fs.writeFileSync(PID_FILE, String(process.pid), { flag: "wx" });
+    return true;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") {
+      // Unexpected error (permission, disk, etc.) — log and proceed as active
+      logError(`PID 文件写入失败: ${String(err)}，按 active 模式继续`);
+      return true;
+    }
+  }
+
+  // File exists — check if the holder is still alive
+  try {
+    const existingPid = Number(fs.readFileSync(PID_FILE, "utf-8").trim());
+    if (existingPid && isProcessAlive(existingPid)) {
+      return false; // Another live scheduler — we are passive
+    }
+  } catch {
+    // Can't read / parse — treat as stale
+  }
+
+  // Stale PID file — overwrite and take ownership
+  try {
+    fs.writeFileSync(PID_FILE, String(process.pid));
+  } catch (err) {
+    logError(`PID 文件覆写失败: ${String(err)}`);
+  }
+  return true;
+}
+
+function releasePidLock(): void {
+  try {
+    const content = fs.readFileSync(PID_FILE, "utf-8").trim();
+    if (Number(content) === process.pid) {
+      fs.unlinkSync(PID_FILE);
+    }
+  } catch {
+    // Already gone or not ours — fine
+  }
+}
+
 // ── Start ───────────────────────────────────────────────────────────────────
 
 export function stopScheduler(): void {
@@ -511,11 +572,19 @@ export function stopScheduler(): void {
     clearTimeout(reloadDebounce);
     reloadDebounce = null;
   }
+  releasePidLock();
+  isPassive = false;
 }
 
 export async function startScheduler(server: Server): Promise<void> {
   ensureDirs();
   initDefaultConfig();
+
+  if (!acquirePidLock()) {
+    isPassive = true;
+    log("🔇 passive mode — 另一个 engine 实例正在调度，本实例跳过定时排程");
+    return;
+  }
 
   const cfg = loadForgeConfig();
   if (Object.keys(cfg.contacts).length === 0) {
