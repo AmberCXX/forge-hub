@@ -39,7 +39,7 @@ export class SecurityEventAggregator {
   private sourceLastSeen = new Map<string, number>();
   private lastGlobalAlertAt = 0;
   private pendingAlertTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingAlertChannel: string | null = null;
+  private pendingAlertChannels = new Set<string>();
   private autoFlushTimer: ReturnType<typeof setInterval> | null = null;
   private onMainContextAlert: (message: string) => void;
 
@@ -107,11 +107,13 @@ export class SecurityEventAggregator {
     }
 
     const canAlert = now - this.lastGlobalAlertAt > GLOBAL_REPEAT_MS;
-    if (canAlert && !this.pendingAlertTimer) {
-      this.pendingAlertChannel = channel;
-      this.pendingAlertTimer = setTimeout(() => {
-        this.emitAlert();
-      }, GROUP_WAIT_MS);
+    if (canAlert) {
+      this.pendingAlertChannels.add(channel);
+      if (!this.pendingAlertTimer) {
+        this.pendingAlertTimer = setTimeout(() => {
+          this.emitAlert();
+        }, GROUP_WAIT_MS);
+      }
     }
   }
 
@@ -149,19 +151,23 @@ export class SecurityEventAggregator {
 
   private emitAlert(): void {
     this.pendingAlertTimer = null;
-    const channel = this.pendingAlertChannel ?? "unknown";
-    this.pendingAlertChannel = null;
+    const channels = [...this.pendingAlertChannels];
+    this.pendingAlertChannels.clear();
+    if (channels.length === 0) return;
 
-    const event = this.events.get(`${channel}:unauthorized:global`);
-    if (event) {
-      event.main_context_alert_emitted = true;
-      event.main_context_alert_count++;
+    for (const ch of channels) {
+      const event = this.events.get(`${ch}:unauthorized:global`);
+      if (event) {
+        event.main_context_alert_emitted = true;
+        event.main_context_alert_count++;
+      }
     }
 
     this.lastGlobalAlertAt = Date.now();
     this.flush();
+    const label = channels.join(" / ");
     this.onMainContextAlert(
-      `⚠️ 检测到未授权访问尝试（${channel} 通道）。详情见 fh hub security。`,
+      `⚠️ 检测到未授权访问尝试（${label} 通道）。详情见 fh hub security。`,
     );
   }
 }
