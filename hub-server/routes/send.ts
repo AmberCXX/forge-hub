@@ -47,7 +47,9 @@ async function handleSendRequest(
 
   try {
     const sendArgs = await buildSendArgs(to, contextToken);
-    const result = await plugin.send(sendArgs);
+    const sendPromise = plugin.send(sendArgs);
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("send timeout (30s)")), 30_000));
+    const result = await Promise.race([sendPromise, timeout]);
 
     if (result.success) {
       appendHistory(body.channel, "out", getOutboundFrom(body.instance), onSuccess(to));

@@ -83,6 +83,8 @@ const { identitiesFile: IDENTITIES_FILE } = getSessionConfigPaths(HUB_DIR);
 // 我们自己写 ~/.forge-hub/hub-client.log（每 instance 一行 append，带 INSTANCE_ID + timestamp）——
 // 方便事后 debug 类似"Hub 推了 252 条但 client 没注入"这种没有证据的事故。
 const CLIENT_LOG_FILE = path.join(HUB_DIR, "hub-client.log");
+const CLIENT_LOG_MAX_SIZE = 1024 * 1024; // 1MB
+const CLIENT_LOG_KEEP = 2;
 const HUB_STATUS_TIMEOUT_MS = 2_000;
 const HUB_RECOVERY_POLL_MS = 1_000;
 const WS_RETRY_START_MS = 1_000;
@@ -95,8 +97,21 @@ const CHANNEL_READY_LOGS = new Set([
 ]);
 const PROCESS_STARTED_AT = new Date();
 
+function rotateClientLogIfNeeded(): void {
+  try {
+    const stat = fs.statSync(CLIENT_LOG_FILE);
+    if (stat.size < CLIENT_LOG_MAX_SIZE) return;
+    for (let i = CLIENT_LOG_KEEP; i >= 1; i--) {
+      const from = i === 1 ? CLIENT_LOG_FILE : `${CLIENT_LOG_FILE}.${i - 1}`;
+      const to = `${CLIENT_LOG_FILE}.${i}`;
+      try { fs.renameSync(from, to); } catch { /* best-effort */ }
+    }
+  } catch { /* file may not exist yet */ }
+}
+
 function writeFileLog(level: "INFO" | "ERROR", msg: string): void {
   try {
+    rotateClientLogIfNeeded();
     const line = `[${new Date().toISOString()}] [${INSTANCE_ID}] ${level} ${msg}\n`;
     fs.appendFileSync(CLIENT_LOG_FILE, line, "utf-8");
   } catch {
