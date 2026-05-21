@@ -1210,7 +1210,7 @@ async function hubSetupWechat(): Promise<void> {
   while (Date.now() - startTime < POLL_TIMEOUT_S * 1000) {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 40_000);
+      const timer = setTimeout(() => controller.abort(), 8_000);
       const res = await fetch(`${ILINK_BASE}/ilink/bot/get_qrcode_status?qrcode=${qrKey}`, { signal: controller.signal });
       clearTimeout(timer);
       const data = await res.json() as {
@@ -1235,11 +1235,8 @@ async function hubSetupWechat(): Promise<void> {
         // Write account.json
         const stateDir = path.join(HUB_DIR, "state", "wechat");
         fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-        const accountPath = path.join(stateDir, "account.json");
-        const tmp = `${accountPath}.tmp.${process.pid}`;
-        fs.writeFileSync(tmp, JSON.stringify(account, null, 2), { encoding: "utf-8", mode: 0o600 });
-        fs.renameSync(tmp, accountPath);
-        console.log(`✓ 凭证已写入 ${accountPath}`);
+        writeSensitiveJsonFile(path.join(stateDir, "account.json"), account);
+        console.log(`✓ 凭证已写入 state/wechat/account.json`);
 
         // Auto-create allowlist with the scanning user
         if (account.userId) {
@@ -1249,16 +1246,13 @@ async function hubSetupWechat(): Promise<void> {
           if (fs.existsSync(allowlistPath)) {
             try { allowlist = JSON.parse(fs.readFileSync(allowlistPath, "utf-8")); } catch { /* start fresh */ }
           }
-          const alreadyAllowed = allowlist.allowed.some(e => e.id === account.userId);
-          if (!alreadyAllowed) {
+          if (!allowlist.allowed.some(e => e.id === account.userId)) {
             allowlist.allowed.push({ id: account.userId, nickname: "我" });
             console.log(`✓ 已将你的微信 (${account.userId.slice(0, 16)}...) 加入 allowlist`);
           }
           allowlist.approval_owner_id = account.userId;
           console.log(`✓ 已设为审批 owner`);
-          const alTmp = `${allowlistPath}.tmp.${process.pid}`;
-          fs.writeFileSync(alTmp, JSON.stringify(allowlist, null, 2), { encoding: "utf-8", mode: 0o600 });
-          fs.renameSync(alTmp, allowlistPath);
+          writeSensitiveJsonFile(allowlistPath, allowlist);
         }
 
         // Add wechat to approval_channels if not already
@@ -1271,9 +1265,7 @@ async function hubSetupWechat(): Promise<void> {
         if (!channels.includes("wechat")) {
           channels.push("wechat");
           config.approval_channels = channels;
-          const cfgTmp = `${configPath}.tmp.${process.pid}`;
-          fs.writeFileSync(cfgTmp, JSON.stringify(config, null, 2), "utf-8");
-          fs.renameSync(cfgTmp, configPath);
+          writeSensitiveJsonFile(configPath, config);
           console.log(`✓ 已将 wechat 加入 approval_channels`);
         }
 
@@ -1291,13 +1283,16 @@ async function hubSetupWechat(): Promise<void> {
           die("二维码已过期 3 次，请重新运行 fh hub setup wechat");
         }
         console.log("\n⏳ 二维码已过期，正在刷新...");
-        const refreshRes = await fetch(`${ILINK_BASE}/ilink/bot/get_bot_qrcode?bot_type=3`);
-        const refreshData = await refreshRes.json() as { qrcode?: string; qrcode_img_content?: string };
-        if (refreshData.qrcode && refreshData.qrcode_img_content) {
-          qrKey = refreshData.qrcode;
-          qrUrl = refreshData.qrcode_img_content;
-          try { spawn("open", [qrUrl], { stdio: "ignore" }); } catch { /* best-effort */ }
-          console.log(`  新二维码已打开: ${qrUrl}\n`);
+        try {
+          const refreshRes = await fetch(`${ILINK_BASE}/ilink/bot/get_bot_qrcode?bot_type=3`);
+          const refreshData = await refreshRes.json() as { qrcode?: string; qrcode_img_content?: string };
+          if (refreshData.qrcode && refreshData.qrcode_img_content) {
+            qrKey = refreshData.qrcode;
+            qrUrl = refreshData.qrcode_img_content;
+            console.log(`  请扫描新二维码: ${qrUrl}\n`);
+          }
+        } catch (refreshErr) {
+          console.error(`  刷新二维码失败: ${String(refreshErr)}`);
         }
       } else {
         process.stdout.write("\r⏳ 等待扫码...");
