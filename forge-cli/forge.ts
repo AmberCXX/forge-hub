@@ -1171,6 +1171,147 @@ async function hubSetup(): Promise<void> {
   console.log("    fh hub owner wechat 小明");
 }
 
+// ── WeChat Setup ────────────────────────────────────────────────────────────
+
+const ILINK_BASE = "https://ilinkai.weixin.qq.com";
+
+async function hubSetupWechat(): Promise<void> {
+  console.log("微信通道配置向导\n");
+
+  // Step 1: Get QR code
+  console.log("⏳ 正在获取二维码...");
+  let qrKey: string;
+  let qrUrl: string;
+  try {
+    const res = await fetch(`${ILINK_BASE}/ilink/bot/get_bot_qrcode?bot_type=3`);
+    const data = await res.json() as { qrcode?: string; qrcode_img_content?: string; ret?: number };
+    if (!data.qrcode || !data.qrcode_img_content) {
+      die(`获取二维码失败: ${JSON.stringify(data)}`);
+    }
+    qrKey = data.qrcode;
+    qrUrl = data.qrcode_img_content;
+  } catch (err) {
+    die(`连接 iLink 服务器失败: ${String(err)}\n提示: 确认网络可访问 ${ILINK_BASE}`);
+  }
+
+  // Step 2: Display QR
+  console.log("\n📱 请用微信扫描二维码:\n");
+  try {
+    spawn("open", [qrUrl], { stdio: "ignore" });
+    console.log(`  二维码已在浏览器打开`);
+  } catch { /* macOS open failed, fall through to URL */ }
+  console.log(`  如未自动打开，请手动访问: ${qrUrl}\n`);
+
+  // Step 3: Poll for scan
+  const POLL_TIMEOUT_S = 480;
+  const startTime = Date.now();
+  let refreshCount = 0;
+
+  while (Date.now() - startTime < POLL_TIMEOUT_S * 1000) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 40_000);
+      const res = await fetch(`${ILINK_BASE}/ilink/bot/get_qrcode_status?qrcode=${qrKey}`, { signal: controller.signal });
+      clearTimeout(timer);
+      const data = await res.json() as {
+        status?: string;
+        bot_token?: string;
+        baseurl?: string;
+        ilink_bot_id?: string;
+        ilink_user_id?: string;
+      };
+
+      if (data.status === "confirmed" && data.bot_token) {
+        console.log("\n✅ 扫码成功！");
+
+        const account = {
+          token: data.bot_token,
+          baseUrl: data.baseurl ?? ILINK_BASE,
+          accountId: data.ilink_bot_id ?? "",
+          userId: data.ilink_user_id ?? "",
+          savedAt: new Date().toISOString(),
+        };
+
+        // Write account.json
+        const stateDir = path.join(HUB_DIR, "state", "wechat");
+        fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+        const accountPath = path.join(stateDir, "account.json");
+        const tmp = `${accountPath}.tmp.${process.pid}`;
+        fs.writeFileSync(tmp, JSON.stringify(account, null, 2), { encoding: "utf-8", mode: 0o600 });
+        fs.renameSync(tmp, accountPath);
+        console.log(`✓ 凭证已写入 ${accountPath}`);
+
+        // Auto-create allowlist with the scanning user
+        if (account.userId) {
+          const allowlistPath = path.join(stateDir, "allowlist.json");
+          let allowlist: { allowed: { id: string; nickname: string }[]; auto_allow_next: boolean; approval_owner_id?: string } =
+            { allowed: [], auto_allow_next: false };
+          if (fs.existsSync(allowlistPath)) {
+            try { allowlist = JSON.parse(fs.readFileSync(allowlistPath, "utf-8")); } catch { /* start fresh */ }
+          }
+          const alreadyAllowed = allowlist.allowed.some(e => e.id === account.userId);
+          if (!alreadyAllowed) {
+            allowlist.allowed.push({ id: account.userId, nickname: "我" });
+            console.log(`✓ 已将你的微信 (${account.userId.slice(0, 16)}...) 加入 allowlist`);
+          }
+          allowlist.approval_owner_id = account.userId;
+          console.log(`✓ 已设为审批 owner`);
+          const alTmp = `${allowlistPath}.tmp.${process.pid}`;
+          fs.writeFileSync(alTmp, JSON.stringify(allowlist, null, 2), { encoding: "utf-8", mode: 0o600 });
+          fs.renameSync(alTmp, allowlistPath);
+        }
+
+        // Add wechat to approval_channels if not already
+        const configPath = path.join(HUB_DIR, "hub-config.json");
+        let config: Record<string, unknown> = {};
+        if (fs.existsSync(configPath)) {
+          try { config = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch { /* fresh */ }
+        }
+        const channels = (config.approval_channels ?? []) as string[];
+        if (!channels.includes("wechat")) {
+          channels.push("wechat");
+          config.approval_channels = channels;
+          const cfgTmp = `${configPath}.tmp.${process.pid}`;
+          fs.writeFileSync(cfgTmp, JSON.stringify(config, null, 2), "utf-8");
+          fs.renameSync(cfgTmp, configPath);
+          console.log(`✓ 已将 wechat 加入 approval_channels`);
+        }
+
+        console.log("\n🎉 微信通道配置完成！重启 Hub 生效:");
+        console.log("  launchctl kickstart -k gui/$(id -u)/com.forge-hub\n");
+        console.log("之后从微信给自己发一条消息试试。");
+        return;
+      }
+
+      if (data.status === "scaned") {
+        process.stdout.write("\r📱 已扫码，请在手机上确认...");
+      } else if (data.status === "expired") {
+        refreshCount++;
+        if (refreshCount >= 3) {
+          die("二维码已过期 3 次，请重新运行 fh hub setup wechat");
+        }
+        console.log("\n⏳ 二维码已过期，正在刷新...");
+        const refreshRes = await fetch(`${ILINK_BASE}/ilink/bot/get_bot_qrcode?bot_type=3`);
+        const refreshData = await refreshRes.json() as { qrcode?: string; qrcode_img_content?: string };
+        if (refreshData.qrcode && refreshData.qrcode_img_content) {
+          qrKey = refreshData.qrcode;
+          qrUrl = refreshData.qrcode_img_content;
+          try { spawn("open", [qrUrl], { stdio: "ignore" }); } catch { /* best-effort */ }
+          console.log(`  新二维码已打开: ${qrUrl}\n`);
+        }
+      } else {
+        process.stdout.write("\r⏳ 等待扫码...");
+      }
+    } catch (err) {
+      if (String(err).includes("abort")) continue;
+      console.error(`\n轮询异常: ${String(err)}，重试中...`);
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  die("扫码超时（8 分钟）。请重新运行 fh hub setup wechat");
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 const [domain, command, ...rest] = process.argv.slice(2);
@@ -1180,6 +1321,7 @@ if (!domain) {
 
 用法:
   fh hub setup           首次配置向导（设置 approval_channels）
+  fh hub setup wechat    微信通道配置（扫码→自动写凭证+allowlist+owner）
   fh hub lock            紧急锁定（关闭所有远程通道）
   fh hub unlock          解锁
   fh hub set-lock-phrase <暗号>  设置锁定暗号
@@ -1357,7 +1499,14 @@ async function hubPs(): Promise<void> {
 
 if (domain === "hub") {
   switch (command) {
-    case "setup": await hubSetup(); break;
+    case "setup": {
+      if (rest[0] === "wechat" || rest[0] === "wx") {
+        await hubSetupWechat();
+      } else {
+        await hubSetup();
+      }
+      break;
+    }
     case "lock": await hubLock(); break;
     case "unlock": await hubUnlock(); break;
     case "set-lock-phrase": hubSetLockPhrase(rest); break;
