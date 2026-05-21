@@ -1178,6 +1178,19 @@ const ILINK_BASE = "https://ilinkai.weixin.qq.com";
 async function hubSetupWechat(): Promise<void> {
   console.log("微信通道配置向导\n");
 
+  // Check existing config
+  const existingAccount = path.join(HUB_DIR, "state", "wechat", "account.json");
+  if (fs.existsSync(existingAccount)) {
+    const { createInterface } = await import("node:readline/promises");
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await rl.question("⚠ 已有微信配置。重新扫码将覆盖现有凭证。继续？(y/N) ");
+    rl.close();
+    if (answer.trim().toLowerCase() !== "y") {
+      console.log("已取消。");
+      return;
+    }
+  }
+
   // Step 1: Get QR code
   console.log("⏳ 正在获取二维码...");
   let qrKey: string;
@@ -1231,6 +1244,28 @@ async function hubSetupWechat(): Promise<void> {
           userId: data.ilink_user_id ?? "",
           savedAt: new Date().toISOString(),
         };
+
+        // Verify token works
+        console.log("⏳ 验证 token...");
+        try {
+          const verifyRes = await fetch(`${account.baseUrl}/ilink/bot/getupdates`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              AuthorizationType: "ilink_bot_token",
+              Authorization: `Bearer ${account.token}`,
+            },
+            body: JSON.stringify({ timeout: 0 }),
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (!verifyRes.ok) {
+            console.error(`⚠ token 验证失败 (HTTP ${verifyRes.status})，凭证可能无效。仍将写入，请手动检查。`);
+          } else {
+            console.log("✓ token 验证通过");
+          }
+        } catch (verifyErr) {
+          console.error(`⚠ token 验证超时: ${String(verifyErr)}，仍将写入。`);
+        }
 
         // Write account.json
         const stateDir = path.join(HUB_DIR, "state", "wechat");
