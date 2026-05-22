@@ -5,4 +5,8 @@ export function isNetworkError(msg: string): boolean {
     lower.includes("etimedout") || lower.includes("epipe");
 }
 
+export function isILinkRejection(msg: string): boolean {
+  return msg.includes("sendmessage 失败");
+}
+
 export const SEND_RETRY_DELAY_MS = 3000;

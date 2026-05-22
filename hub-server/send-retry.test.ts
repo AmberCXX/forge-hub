@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { isNetworkError, SEND_RETRY_DELAY_MS } from "./send-retry.js";
+import { isNetworkError, isILinkRejection, SEND_RETRY_DELAY_MS } from "./send-retry.js";
 
 // ── isNetworkError ───────────────────────────────────────────────────────────
 
@@ -51,6 +51,25 @@ describe("isNetworkError", () => {
     // "sock" without the full "socket" — currently isNetworkError does substring
     // matching with .includes("socket"), so "sock" alone should not match
     expect(isNetworkError("sock drawer")).toBe(false);
+  });
+});
+
+// ── isILinkRejection ────────────────────────────────────────────────────────
+
+describe("isILinkRejection", () => {
+  test("detects iLink sendmessage failures", () => {
+    expect(isILinkRejection("Error: sendmessage 失败: ret=-2 errcode=undefined errmsg=")).toBe(true);
+    expect(isILinkRejection("sendmessage 失败: ret=-1 errcode=40001 errmsg=invalid token")).toBe(true);
+  });
+
+  test("returns false for network errors", () => {
+    expect(isILinkRejection("fetch failed")).toBe(false);
+    expect(isILinkRejection("ECONNRESET")).toBe(false);
+  });
+
+  test("returns false for unrelated errors", () => {
+    expect(isILinkRejection("401 Unauthorized")).toBe(false);
+    expect(isILinkRejection("")).toBe(false);
   });
 });
 

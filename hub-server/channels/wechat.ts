@@ -19,7 +19,7 @@ import path from "node:path";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-import { isNetworkError, SEND_RETRY_DELAY_MS } from "../send-retry.js";
+import { isNetworkError, isILinkRejection, SEND_RETRY_DELAY_MS } from "../send-retry.js";
 
 const TYPING_STATUS_TYPING = 1;
 const TYPING_STATUS_CANCEL = 2;
@@ -368,29 +368,35 @@ const plugin: ChannelPlugin = {
 
       return { success: false, error: `unknown type: ${type}` };
     } catch (err) {
-      const raw = String(err);
-      if (isNetworkError(raw)) {
-        hub.logError(`发送失败（网络），${SEND_RETRY_DELAY_MS / 1000}s 后重试: ${redactSensitive(raw)}`);
-        await new Promise(r => setTimeout(r, SEND_RETRY_DELAY_MS));
-        try {
-          if (type === "text") {
-            await sendText(account.baseUrl, account.token, to, stripMarkdown(content), contextToken);
-          } else if (type === "file" && filePath) {
-            await uploadAndSendMedia(account.baseUrl, account.token, to, filePath, contextToken, MEDIA_DIR);
-          } else if (type === "voice") {
-            await sendTtsAsMp3File(account.baseUrl, account.token, to, content, contextToken, MEDIA_DIR);
-          }
-          hub.log(`→ 重试成功`);
-          return { success: true };
-        } catch (retryErr) {
-          hub.logError(`重试也失败: ${redactSensitive(String(retryErr))}`);
-          return { success: false, error: `[微信通道] 发送失败——Hub 到 iLink 服务器的连接中断。已重试 1 次仍未恢复，建议稍后重试。` };
+      const errMsg = String(err);
+      const retriable = isNetworkError(errMsg) || isILinkRejection(errMsg);
+
+      if (!retriable) {
+        hub.logError(`发送失败: ${redactSensitive(errMsg)}`);
+        return { success: false, error: `[微信通道] 发送失败——${redactSensitive(errMsg)}` };
+      }
+
+      const reason = isILinkRejection(errMsg) ? "iLink 拒绝" : "网络";
+      hub.logError(`发送失败（${reason}），${SEND_RETRY_DELAY_MS / 1000}s 后重试: ${redactSensitive(errMsg)}`);
+      await new Promise(r => setTimeout(r, SEND_RETRY_DELAY_MS));
+      try {
+        if (type === "text") {
+          await sendText(account.baseUrl, account.token, to, stripMarkdown(content), contextToken);
+        } else if (type === "file" && filePath) {
+          await uploadAndSendMedia(account.baseUrl, account.token, to, filePath, contextToken, MEDIA_DIR);
+        } else if (type === "voice") {
+          await sendTtsAsMp3File(account.baseUrl, account.token, to, content, contextToken, MEDIA_DIR);
         }
+        hub.log(`→ 重试成功`);
+        return { success: true };
+      } catch (retryErr) {
+        const retryErrMsg = redactSensitive(String(retryErr));
+        hub.logError(`重试也失败: ${retryErrMsg}`);
+        if (isILinkRejection(String(retryErr))) {
+          return { success: false, error: `[微信通道] 发送被 iLink 连续拒绝（${retryErrMsg}）——可能需要重新扫码登录。` };
+        }
+        return { success: false, error: `[微信通道] 发送失败——连接中断（${retryErrMsg}），已重试仍未恢复，建议稍后重试。` };
       }
-      if (raw.includes("sendmessage 失败")) {
-        return { success: false, error: `[微信通道] 发送被 iLink 拒绝（${redactSensitive(raw)}）——可能需要重新扫码登录。` };
-      }
-      return { success: false, error: `[微信通道] 发送失败——${redactSensitive(raw)}` };
     } finally {
       cancelTyping();
     }
