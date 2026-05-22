@@ -555,6 +555,7 @@ async function connectWebSocket(): Promise<void> {
 async function connectWithRetry(): Promise<void> {
   let retryDelay = WS_RETRY_START_MS;
   let connectCount = 0;
+  let channelHandlerFailures = 0;
 
   while (true) {
     let hubStatus = await probeHubStatus();
@@ -592,6 +593,14 @@ async function connectWithRetry(): Promise<void> {
       }
       if (hubStatusAfterError.kind === "unauthorized") logHubAuthFailure();
 
+      if (reason.includes("1013")) {
+        channelHandlerFailures++;
+        if (channelHandlerFailures >= 2) {
+          log("channel handler 连续检测失败，降级到工具模式");
+          await startToolMode(null, "channel handler 检测失败，自动降级");
+          return;
+        }
+      }
       log(`WebSocket 断开，但 Hub 仍在线；${retryDelay / 1000}s 后重连... (${reason})`);
       await sleep(retryDelay);
       retryDelay = Math.min(retryDelay * 2, WS_RETRY_MAX_MS);
