@@ -593,13 +593,15 @@ async function connectWithRetry(): Promise<void> {
       }
       if (hubStatusAfterError.kind === "unauthorized") logHubAuthFailure();
 
-      if (reason.includes("1013")) {
+      if (reason.includes("code=1013")) {
         channelHandlerFailures++;
         if (channelHandlerFailures >= 2) {
           log("channel handler 连续检测失败，降级到工具模式");
           await startToolMode(null, "channel handler 检测失败，自动降级");
           return;
         }
+      } else {
+        channelHandlerFailures = 0;
       }
       log(`WebSocket 断开，但 Hub 仍在线；${retryDelay / 1000}s 后重连... (${reason})`);
       await sleep(retryDelay);
