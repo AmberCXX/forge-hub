@@ -45,6 +45,12 @@ CC 关窗口时发 SIGHUP（终端关闭信号）。hub-channel.ts 捕获后：
 
 PID 同时记录在启动和退出日志中，方便用 `ps` 输出比对。
 
+日志文件 1MB 自动轮转（保留 2 份历史：`.1`、`.2`），和 hub.log 同规格。
+
+### 自动降级
+
+无 session config 的实例走自动检测：先连 WebSocket，等待 Claude Code channel handler 注册（60s）。连续 2 次检测超时后自动降级到工具模式，停止重连。防止 MCP 日志误匹配导致 tools 实例进入无限重连循环。
+
 ### 诊断
 
 ```bash

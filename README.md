@@ -233,6 +233,7 @@ hub-test-harness/            ← 独立测试 binary（不污染生产 hub）
 <summary><strong>CLI 命令</strong></summary>
 
 ```bash
+fh hub setup wechat        # 一键微信配置（扫码→凭证+allowlist+owner）
 fh hub status              # Hub 健康（每通道 ✓/⚠/✗ + 最近错误）
 fh hub peers               # 在线实例
 fh hub channels            # 已加载通道
