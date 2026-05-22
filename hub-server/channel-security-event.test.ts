@@ -26,7 +26,8 @@ describe("channel security event bridge", () => {
   });
 
   test("every channel unauthorized evidence branch records a security event", () => {
-    const channelFiles = ["telegram.ts", "feishu.ts", "wechat.ts", "imessage.ts"];
+    // imessage 读本地 chat.db，非白名单消息是正常噪音，不触发安全事件
+    const channelFiles = ["telegram.ts", "feishu.ts", "wechat.ts"];
 
     for (const file of channelFiles) {
       const source = fs.readFileSync(path.join(import.meta.dir, "channels", file), "utf-8");
@@ -36,5 +37,14 @@ describe("channel security event bridge", () => {
       expect(evidenceCalls).toBeGreaterThan(0);
       expect(eventCalls).toBe(evidenceCalls);
     }
+  });
+
+  test("imessage records evidence but does not fire security events", () => {
+    const source = fs.readFileSync(path.join(import.meta.dir, "channels", "imessage.ts"), "utf-8");
+    const evidenceCalls = source.match(/recordUnauthorizedEvidence\(/g)?.length ?? 0;
+    const eventCalls = source.match(/\b(?:hub|hubApi)\.recordSecurityEvent\(/g)?.length ?? 0;
+
+    expect(evidenceCalls).toBeGreaterThan(0);
+    expect(eventCalls).toBe(0);
   });
 });

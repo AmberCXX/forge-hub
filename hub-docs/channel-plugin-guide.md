@@ -202,11 +202,13 @@ if (!isAllowed(senderId)) {
 }
 ```
 
-三点必做：
+三点必做（适用于**接收外部网络消息**的通道——Telegram / 微信 / 飞书 / Discord 等）：
 
 1. **调 `recordUnauthorizedEvidence`** 把原始 payload 写入 `~/.forge-hub/state/_hub/evidence/` vault（磁盘落盘，不进 agent context）。用户事后可通过 `fh hub security evidence` 查阅。
 2. **调 `hub.recordSecurityEvent`** 登记聚合安全事件。Hub 层自动限频（每通道每 sender 最多 1 条/小时）向 agent 推送极简提醒，不回显原文。
 3. **静默丢弃原消息**。不调 `hub.pushMessage`，不给外部发送者任何回复——连"你没有权限"都不说（避免 oracle 暴露 bot 存在）。
+
+> **例外：本地数据源通道**（如 iMessage）。iMessage 读本地 `chat.db`，运营商短信 / 银行通知是正常噪音，不是安全事件。这类通道仍调 `recordUnauthorizedEvidence`（保留审计记录），但**不调 `recordSecurityEvent`**（不推警报）。详见 [`imessage-README.md`](../hub-server/channels/imessage-README.md)。
 
 > **Legacy fallback**：`hub.formatUnauthorizedNotice(displayName, senderId, rawContent)` 仍然可用，保留给第三方 plugin 或旧示例做自防护。但内置通道已不再使用 `pushMessage` + `formatUnauthorizedNotice` 模式——如果你在写新的通道插件，请使用上面的 evidence + security event 模式。
 

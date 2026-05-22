@@ -235,7 +235,7 @@ async function pollInner(): Promise<void> {
         };
         if (text) rawData.text_length = text.length;
 
-        const evidence = recordUnauthorizedEvidence({
+        recordUnauthorizedEvidence({
           channel: "imessage",
           ingestMode: "polling",
           updateId: String(r.rowid),
@@ -248,11 +248,7 @@ async function pollInner(): Promise<void> {
           displayName: sender,
           logError: (m) => hub.logError(m),
         });
-        hub.recordSecurityEvent({
-          sourceUserId: sender,
-          contentType,
-          evidenceId: evidence?.evidence_id ?? "",
-        });
+        // iMessage 读本地 chat.db，非白名单消息是正常噪音（运营商/银行），不是安全事件
         continue;
       }
     }
