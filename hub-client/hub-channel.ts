@@ -541,7 +541,9 @@ async function connectWebSocket(): Promise<void> {
     };
 
     ws.onclose = (event) => {
-      reject(new Error(`WebSocket 关闭 (code=${event.code})`));
+      const err = new Error(`WebSocket 关闭 (code=${event.code})`);
+      (err as any).closeCode = event.code;
+      reject(err);
     };
 
     ws.onerror = () => {
@@ -593,7 +595,7 @@ async function connectWithRetry(): Promise<void> {
       }
       if (hubStatusAfterError.kind === "unauthorized") logHubAuthFailure();
 
-      if (reason.includes("code=1013")) {
+      if ((err as any).closeCode === 1013) {
         channelHandlerFailures++;
         if (channelHandlerFailures >= 2) {
           log("channel handler 连续检测失败，降级到工具模式");
