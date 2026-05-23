@@ -21,12 +21,10 @@ import {
   CHANNEL_NAME,
   CHANNEL_VERSION,
   SCHEDULE_DIR,
-  ACTION_LOG_FILE,
   log,
   logError,
 } from "./config.js";
 import { startScheduler, stopScheduler } from "./scheduler.js";
-import type { RawScheduleEntry } from "./types.js";
 import { resolveTaskTiming } from "./task-timing.js";
 import type { EngineAddTaskArgs } from "./task-timing.js";
 
@@ -204,26 +202,34 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const filename = oneShot ? `oneshot_${id}.json` : `task_${id}.json`;
     const filePath = path.join(SCHEDULE_DIR, filename);
 
-    const schedule: RawScheduleEntry = {
-      hour,
-      minute,
-      second,
-      template: args.template ?? "[提醒] {time}。{prompt}",
-      prompt: args.prompt,
-      label: args.label,
-      sender: args.sender || process.env.HUB_AGENT_NAME || "reminder",
-      source: "ai" as const,
-      ...(oneShot ? { one_shot: true } : {}),
-      ...(args.weekdays ? { weekdays: args.weekdays } : {}),
-      ...(args.days ? { days: args.days } : {}),
-      ...(args.months ? { months: args.months } : {}),
-      ...(start_date ? { start_date } : {}),
-      ...(end_date ? { end_date } : {}),
-    };
+    const timeStr = formatTime(hour, minute, second);
 
-    const config = {
-      schedules: [schedule],
-    };
+    const resolvedSender = args.sender || process.env.HUB_AGENT_NAME || "";
+    const config: Record<string, unknown> = oneShot
+      ? {
+          type: "oneshot",
+          time: timeStr,
+          date: start_date ?? formatDate(new Date()),
+          prompt: args.prompt,
+          ...(args.label ? { label: args.label } : {}),
+          ...(args.template ? { template: args.template } : {}),
+          ...(resolvedSender ? { sender: resolvedSender } : {}),
+          source: "ai",
+        }
+      : {
+          type: "reminder",
+          time: timeStr,
+          prompt: args.prompt,
+          ...(args.label ? { label: args.label } : {}),
+          ...(args.template ? { template: args.template } : {}),
+          ...(resolvedSender ? { sender: resolvedSender } : {}),
+          ...(args.weekdays?.length ? { weekdays: args.weekdays } : {}),
+          ...(args.days?.length ? { days: args.days } : {}),
+          ...(args.months?.length ? { months: args.months } : {}),
+          ...(start_date ? { start_date } : {}),
+          ...(end_date ? { end_date } : {}),
+          source: "ai",
+        };
 
     try {
       fs.writeFileSync(filePath, JSON.stringify(config, null, 2), "utf-8");

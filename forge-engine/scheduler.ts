@@ -169,8 +169,33 @@ export function removeScheduleEntryFromFile(
   filePath: string,
   entryIndex: number,
 ): { removed: boolean; remaining: number } {
-  const data = JSON.parse(fs.readFileSync(filePath, "utf-8")) as ScheduleFile & Record<string, unknown>;
-  const schedules = Array.isArray(data.schedules) ? data.schedules : [];
+  const data = JSON.parse(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+
+  // 语义格式（type: "oneshot" / "reminder" / ...）：单文件 = 单任务或 tasks 数组
+  if (typeof data.type === "string") {
+    if (data.type === "heartbeat") {
+      return { removed: false, remaining: 3 };
+    }
+    const tasks = data.tasks as unknown[] | undefined;
+    if (!tasks) {
+      if (entryIndex !== 0) return { removed: false, remaining: 1 };
+      fs.unlinkSync(filePath);
+      return { removed: true, remaining: 0 };
+    }
+    if (entryIndex < 0 || entryIndex >= tasks.length) {
+      return { removed: false, remaining: tasks.length };
+    }
+    const next = tasks.filter((_, i) => i !== entryIndex);
+    if (next.length === 0) {
+      fs.unlinkSync(filePath);
+    } else {
+      fs.writeFileSync(filePath, JSON.stringify({ ...data, tasks: next }, null, 2), "utf-8");
+    }
+    return { removed: true, remaining: next.length };
+  }
+
+  // 老格式（{ schedules: [...] }）
+  const schedules = Array.isArray((data as unknown as ScheduleFile).schedules) ? (data as unknown as ScheduleFile).schedules : [];
 
   if (entryIndex < 0 || entryIndex >= schedules.length) {
     return { removed: false, remaining: schedules.length };
@@ -450,6 +475,20 @@ function partialReload(changedOrigin: string, server: Server): void {
 
 // ── Expired Task Cleanup ────────────────────────────────────────────────────
 
+function isExpiredFile(data: Record<string, unknown>, today: string): boolean {
+  if (typeof data.type === "string") {
+    const endDate = (data.date ?? data.end_date) as string | undefined;
+    if (!endDate || endDate >= today) return false;
+    if (data.source === "ai") return true;
+    const tasks = data.tasks as Record<string, unknown>[] | undefined;
+    return !!tasks?.length && tasks.every((t: Record<string, unknown>) => t.source === "ai");
+  }
+  const schedules = (data.schedules ?? []) as Record<string, unknown>[];
+  return schedules.length > 0 && schedules.every((s) =>
+    s.end_date && (s.end_date as string) < today && s.source === "ai"
+  );
+}
+
 function cleanExpiredTasks(): void {
   try {
     const today = dateStr();
@@ -458,11 +497,7 @@ function cleanExpiredTasks(): void {
     for (const file of files) {
       try {
         const data = JSON.parse(fs.readFileSync(path.join(SCHEDULE_DIR, file), "utf-8"));
-        const schedules = data.schedules ?? [];
-        const allExpired = schedules.length > 0 && schedules.every((s: RawScheduleEntry) =>
-          s.end_date && s.end_date < today && s.source === "ai"
-        );
-        if (allExpired) {
+        if (isExpiredFile(data, today)) {
           fs.unlinkSync(path.join(SCHEDULE_DIR, file));
           log(`🧹 过期任务已清理: ${file}`);
           appendSystemLog(`过期任务已清理: ${file}`);

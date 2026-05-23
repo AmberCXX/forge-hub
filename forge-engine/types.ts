@@ -78,6 +78,80 @@ export interface ScheduleFile {
 /** 向后兼容别名 */
 export type ScheduleEntry = RawScheduleEntry;
 
+// ── 语义化配置格式（v2） ──────────────────────────────────────────────────
+
+interface TaskFields {
+  time: string;
+  prompt: string;
+  label?: string;
+  template?: string;
+  sender?: string;
+  handler?: string;
+  weekdays?: number[];
+  days?: number[];
+  months?: number[];
+  start_date?: string;
+  end_date?: string;
+  source?: "manual" | "ai";
+  permission?: "auto" | "inform" | "confirm" | "strict";
+}
+
+export interface HeartbeatConfig {
+  type: "heartbeat";
+  wakeup: string;
+  sleep: string;
+  active_start?: number;
+  active_end?: number;
+  daily_count?: number;
+  min_per_hour?: number;
+  template?: string;
+}
+
+export interface ReminderConfig {
+  type: "reminder";
+  time?: string;
+  prompt?: string;
+  label?: string;
+  template?: string;
+  sender?: string;
+  source?: "manual" | "ai";
+  weekdays?: number[];
+  days?: number[];
+  months?: number[];
+  start_date?: string;
+  end_date?: string;
+  tasks?: TaskFields[];
+}
+
+export interface InstructionConfig {
+  type: "instruction";
+  time?: string;
+  prompt?: string;
+  label?: string;
+  template?: string;
+  sender?: string;
+  source?: "manual" | "ai";
+  weekdays?: number[];
+  days?: number[];
+  months?: number[];
+  start_date?: string;
+  end_date?: string;
+  tasks?: TaskFields[];
+}
+
+export interface OneshotConfig {
+  type: "oneshot";
+  time: string;
+  date: string;
+  prompt: string;
+  label?: string;
+  template?: string;
+  sender?: string;
+  source?: "manual" | "ai";
+}
+
+export type SemanticConfig = HeartbeatConfig | ReminderConfig | InstructionConfig | OneshotConfig;
+
 // ── 展开后的具体条目 ────────────────────────────────────────────────────────
 
 export interface ResolvedEntry {

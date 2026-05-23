@@ -1,0 +1,16 @@
+{
+  "type": "instruction",
+  "tasks": [
+    {
+      "time": "8:00",
+      "prompt": "Morning check-in. Review yesterday's notes and plan today.",
+      "label": "daily check-in"
+    },
+    {
+      "time": "8:00",
+      "prompt": "Weekly review. Reflect on the past week and set goals.",
+      "label": "weekly review",
+      "weekdays": [1]
+    }
+  ]
+}

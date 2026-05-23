@@ -1,0 +1,9 @@
+{
+  "type": "heartbeat",
+  "wakeup": "7:00",
+  "sleep": "23:00",
+  "active_start": 9,
+  "active_end": 22,
+  "daily_count": 20,
+  "min_per_hour": 1
+}

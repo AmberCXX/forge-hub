@@ -79,15 +79,12 @@ bun install
 2. 创建 schedule `~/.forge-hub/engine-data/engine.d/heartbeat.json`：
 ```json
 {
-  "schedules": [
-    {
-      "hour": 9,
-      "minute": 0,
-      "template": "[heartbeat] Good morning! It's {time} on {weekday}.",
-      "sender": "heartbeat",
-      "label": "morning"
-    }
-  ]
+  "type": "heartbeat",
+  "wakeup": "7:00",
+  "sleep": "23:00",
+  "active_start": 9,
+  "active_end": 22,
+  "daily_count": 20
 }
 ```
 
@@ -131,37 +128,83 @@ fh engine remove heartbeat.json
 fh engine log "今天 14:00 已人工处理"
 ```
 
-## Schedule 格式
+## Schedule 格式（v2 语义化）
 
-每个 `engine.d/*.json` 文件包含一个 `schedules` 数组，每条 entry：
+每个 `engine.d/*.json` 文件有一个 `type` 字段，格式跟着 type 走。
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `hour` | number | 小时（0-23） |
-| `minute` | number | 分钟（0-59） |
-| `template` | string | 消息模板，支持 `{time}` `{weekday}` `{label}` `{contacts}` `{prompt}` |
-| `sender` | string | 消息来源标识（`heartbeat` / `reminder` / `instruction`） |
-| `label` | string? | 可选标签 |
-| `prompt` | string? | 可选 prompt（`{prompt}` 模板变量引用） |
-| `expand` | `"random"`? | 设为 `"random"` 时按 `daily_count` + `active_start/end` 在一天内随机分布 |
-| `weekdays` | number[]? | 限定星期几触发（0=周日，1=周一...6=周六） |
-
-### 随机分布 schedule
+### heartbeat — 心跳
 
 ```json
 {
-  "expand": "random",
-  "hour": 0, "minute": 0,
-  "active_start": 8,
+  "type": "heartbeat",
+  "wakeup": "7:00",
+  "sleep": "23:00",
+  "active_start": 9,
   "active_end": 22,
-  "daily_count": 5,
-  "min_per_hour": 1,
-  "template": "[heartbeat] It's {time}. Check in with the user.",
-  "sender": "heartbeat"
+  "daily_count": 20,
+  "min_per_hour": 1
 }
 ```
 
-每天 0:00 按 `daily_count` 在 `active_start`–`active_end` 范围内随机生成 N 个时间点。
+Engine 自动展开为：起床固定条目 + 睡觉固定条目 + N 条随机分布心跳。
+
+### reminder — 提醒
+
+```json
+{
+  "type": "reminder",
+  "time": "14:00",
+  "prompt": "Stand up and stretch."
+}
+```
+
+多条写成 `tasks` 数组：
+
+```json
+{
+  "type": "reminder",
+  "weekdays": [1, 2, 3, 4, 5],
+  "tasks": [
+    { "time": "9:00", "prompt": "Morning standup" },
+    { "time": "17:00", "prompt": "End of day review" }
+  ]
+}
+```
+
+### instruction — 定时指令
+
+和 reminder 结构相同，默认 sender 是 `"instruction"`，默认 template 是 `[指令] {prompt}`。
+
+### oneshot — 一次性任务
+
+```json
+{
+  "type": "oneshot",
+  "time": "15:30",
+  "date": "2026-05-23",
+  "prompt": "Call the dentist."
+}
+```
+
+触发后自动删除文件。`engine_add_task` 工具创建的任务默认是这个格式。
+
+### 老格式（向后兼容）
+
+没有 `type` 字段的文件走 `{ "schedules": [...] }` 老格式，行为不变。
+
+更多示例见 `examples/` 目录。
+
+## CLI 删除行为
+
+`fh engine remove <query>` 按文件级别删除——匹配到的任务所在的整个文件会被删掉。
+
+这是设计决策，不是疏漏：
+
+- AI 通过 `engine_add_task` 创建的任务都是单文件单任务（`oneshot_xxx.json` / `task_xxx.json`），删文件 = 删任务
+- 手写的多条任务文件（如 awakening.json 里的多条指令）通常不用 CLI 删，而是直接编辑
+- Scheduler 内部的 `removeScheduleEntryFromFile` 支持按条目索引删除单条（用于 one_shot 触发后自动删除），但 CLI 不走这条路径
+
+如果以后需要按条目删除，可以扩展 CLI 加 `--entry <index>` 参数，复用 `removeScheduleEntryFromFile`。
 
 ## 工具
 
