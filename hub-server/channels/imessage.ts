@@ -247,8 +247,8 @@ async function pollInner(): Promise<void> {
           rawJson: JSON.stringify(rawData),
           displayName: sender,
           logError: (m) => hub.logError(m),
+          log: (m) => hub.log(m),
         });
-        // iMessage 读本地 chat.db，非白名单消息是正常噪音（运营商/银行），不是安全事件
         continue;
       }
     }

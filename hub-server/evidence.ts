@@ -229,6 +229,7 @@ export interface RecordUnauthorizedOpts {
   rawJson: string;
   displayName: string;
   logError: (msg: string) => void;
+  log?: (msg: string) => void;
 }
 
 function normalizeUpdateId(updateId: string): string {
@@ -265,6 +266,7 @@ export function recordUnauthorizedEvidence(opts: RecordUnauthorizedOpts): Eviden
   }
 
   const safe = sanitizeDisplayName(opts.displayName);
-  opts.logError(`⛔ 拒绝未授权: ${safe.displayValue} (${opts.chatId}), 类型: ${opts.contentType}`);
+  const logFn = opts.log ?? opts.logError;
+  logFn(`⛔ 拒绝未授权: ${safe.displayValue} (${opts.chatId}), 类型: ${opts.contentType}`);
   return record;
 }
