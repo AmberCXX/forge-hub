@@ -12,5 +12,8 @@
   },
   "engines": {
     "bun": ">=1.0.0"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.65.0"
   }
 }
