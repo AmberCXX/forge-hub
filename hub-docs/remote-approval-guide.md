@@ -26,7 +26,7 @@ Claude Code 要执行工具（bash、写文件等），Hub 把请求转发到你
 
 ### 1. 配置审批通道
 
-编辑 `~/.forge-hub/hub-config.json`：
+编辑 `~/.forge-hub/hub-config.json`，加上 `approval_channels` 字段（和已有配置并列）：
 
 ```json
 {
