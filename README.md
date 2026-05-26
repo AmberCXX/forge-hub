@@ -271,6 +271,7 @@ forge-hub install / uninstall / doctor
 | [hub-dashboard/README.md](hub-dashboard/README.md) | 本地 Dashboard 的构建、接入与运行方式 |
 | [hub-app/](hub-app/) | Native Client *(preview)* — 编译与使用 |
 | [hub-docs/channel-plugin-guide.md](hub-docs/channel-plugin-guide.md) | 写新通道插件 |
+| [hub-docs/remote-approval-guide.md](hub-docs/remote-approval-guide.md) | 远程审批——手机上审批 Claude 权限请求 |
 | [examples/echo.ts](examples/echo.ts) | 最小通道示例（~150 行） |
 | [examples/pretooluse-guard.sh](examples/pretooluse-guard.sh) | 远程审批 hook 示例 |
 
