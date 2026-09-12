@@ -432,12 +432,18 @@ export const cliPlugin: ChannelPlugin = {
       }
 
       if (type === "file" && filePath) {
+        // lark-cli 的 --file 只收「当前目录下的相对路径」，传绝对路径会被它自己的
+        // validation 拒掉（`--file must be a relative path within the current
+        // directory ... hint: cd to the target directory first`），于是走飞书发文件
+        // 必然失败——不是偶发。同文件的 voice 分支与 downloadFeishuMedia 早已按这个
+        // 约束写成 basename + cwd，只有本分支漏了。
+        // 注意：失败时 lark-cli 会先打一行 proxy 警告，真正的错误在下一行，别被带偏。
         await execFileText(LARK_CLI, [
           "im", "+messages-send",
           idFlag, to,
-          "--file", filePath,
+          "--file", basename(filePath),
           "--as", "bot",
-        ], { timeout: 30000 });
+        ], { timeout: 30000, cwd: dirname(filePath) });
 
         hub.log(`→ 文件: ${filePath.slice(0, 60)}`);
         return { success: true };
