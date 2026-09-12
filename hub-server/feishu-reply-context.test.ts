@@ -32,9 +32,9 @@ describe("formatReplyContext", () => {
   });
 
   test("falls back to the parent id when the parent text could not be fetched", () => {
-    const out = formatReplyContext(null, "om_x100b65639edc08a4b1d3b6f726b9afb", "试试");
+    const out = formatReplyContext(null, "om_0000000000000000000000000000ffff", "试试");
 
-    expect(out).toBe("[回复 om_x100b65639edc08a4b1d3b6f726b9afb]\n试试");
+    expect(out).toBe("[回复 om_0000000000000000000000000000ffff]\n试试");
   });
 
   test("keeps the user's own content untouched, including its newlines", () => {
