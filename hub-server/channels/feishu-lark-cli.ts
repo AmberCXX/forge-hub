@@ -255,6 +255,42 @@ export async function resolveImagePlaceholders(
   return out + content.slice(cursor);
 }
 
+/** 引用回复前缀里保留的被引用正文长度；再长就截断加省略号 */
+const REPLY_EXCERPT_LIMIT = 200;
+
+/**
+ * 把「被引用的那条」拼到当前消息前面，agent 才知道用户在回什么。
+ *
+ * 用户在飞书里选中一条消息点「回复」，事件带 reply_to（父消息 id）——此前通道只取
+ * sender/chat/type/content 四个字段，reply_to 落地即丢，agent 收到的是一条裸文本，
+ * 用户只能把原文复制一遍。
+ *
+ * parentText 为 null（取不回父消息）时退化为只带 id，至少让引用关系可追。
+ */
+export function formatReplyContext(parentText: string | null, parentId: string, content: string): string {
+  if (parentText == null) return `[回复 ${parentId}]\n${content}`;
+  const flat = parentText.replace(/\s+/g, " ").trim();
+  const excerpt = flat.length > REPLY_EXCERPT_LIMIT ? `${flat.slice(0, REPLY_EXCERPT_LIMIT)}…` : flat;
+  return `[回复 ▸ ${excerpt}]\n${content}`;
+}
+
+/** 按 message_id 取一条消息的已渲染正文；任何失败返回 null（调用方决定退化方式） */
+async function fetchMessageText(messageId: string): Promise<string | null> {
+  try {
+    const out = await execFileText(LARK_CLI, [
+      "im", "+messages-mget",
+      "--message-ids", messageId,
+      "--as", "bot",
+    ], { timeout: 10000 });
+    const parsed = JSON.parse(out) as { ok?: boolean; data?: { messages?: Array<{ content?: unknown }> } };
+    const text = parsed.ok ? parsed.data?.messages?.[0]?.content : undefined;
+    return typeof text === "string" && text ? text : null;
+  } catch (err) {
+    hub.logError(`引用消息取回失败 ${messageId}: ${String(err)}`);
+    return null;
+  }
+}
+
 async function handleMessage(event: Record<string, unknown>): Promise<void> {
   const senderId = (event.sender_id ?? "") as string;
   const chatId = (event.chat_id ?? "") as string;
@@ -336,6 +372,12 @@ async function handleMessage(event: Record<string, unknown>): Promise<void> {
 
   if (!content) return;
 
+  // 引用回复：把被引用的那条取回来拼在前面，取不到就只带 id
+  const replyToId = (event.reply_to ?? "") as string;
+  if (replyToId) {
+    content = formatReplyContext(await fetchMessageText(replyToId), replyToId, content);
+  }
+
   const senderDisplay = hub.getNickname(senderId) || senderId;
   const displayName = isAuthorizedGroup
     ? `${senderDisplay} @ ${hub.getNickname(chatId)}`
@@ -354,6 +396,7 @@ async function handleMessage(event: Record<string, unknown>): Promise<void> {
       chat_id: chatId,
       message_type: msgType,
       auth_sender_id: isAuthorizedGroup ? chatId : senderId,
+      ...(replyToId ? { reply_to: replyToId } : {}),
     },
   });
 
