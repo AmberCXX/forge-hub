@@ -1,17 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
-// config.ts 在模块加载时就求值 DATA_DIR，所以 env 必须先于 import scheduler 设好。
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "forge-engine-pid-"));
-process.env.FORGE_ENGINE_DATA = tempDir;
-
-const { startScheduler, stopScheduler, retryPassivePromotion, isPassiveMode } =
-  await import("./scheduler.js");
-
-const PID_FILE = path.join(tempDir, "engine.pid");
+// FORGE_ENGINE_DATA 由根 test-setup.ts 统一隔离；这里不再自建 tempDir（否则会被跨文件模块缓存顶掉）。
+import { PID_FILE } from "./config.js";
+import {
+  startScheduler,
+  stopScheduler,
+  retryPassivePromotion,
+  isPassiveMode,
+} from "./scheduler.js";
 
 /** fire() 只用到 server.notification，最小替身足够。 */
 function fakeServer(): Server {
