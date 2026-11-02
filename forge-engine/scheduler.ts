@@ -538,6 +538,7 @@ function scheduleMidnight(server: Server): void {
 // ── PID Lock ───────────────────────────────────────────────────────────────
 
 function isProcessAlive(pid: number): boolean {
+  if (pid === process.pid) return true; // 本进程必然存活；CI 上 process.kill(self, 0) 偶发误判为不存在
   try {
     process.kill(pid, 0);
     return true;
