@@ -2,6 +2,7 @@
  * Forge Engine 路径常量与日志
  */
 
+import fs from "node:fs";
 import path from "node:path";
 
 // ── Channel Identity ────────────────────────────────────────────────────────
